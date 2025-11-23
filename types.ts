@@ -10,6 +10,7 @@ export interface Product {
   min_stock_level: number;
   unit: string;
   current_stock: number;
+  barcode?: string; // New field
   created_at?: string;
 }
 

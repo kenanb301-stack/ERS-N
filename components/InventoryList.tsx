@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X } from 'lucide-react';
+import { Search, Filter, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, ScanBarcode, Printer } from 'lucide-react';
 import { Product } from '../types';
 import { CATEGORIES } from '../constants';
 
@@ -9,16 +9,18 @@ interface InventoryListProps {
   onEdit: (product: Product) => void;
   onAddProduct: () => void;
   onBulkAdd: () => void;
+  onPrintBarcodes: () => void;
 }
 
-const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdit, onAddProduct, onBulkAdd }) => {
+const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdit, onAddProduct, onBulkAdd, onPrintBarcodes }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Tümü');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
-      const matchesSearch = product.product_name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch = product.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            (product.barcode && product.barcode.includes(searchTerm));
       const matchesCategory = selectedCategory === 'Tümü' || product.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
@@ -38,6 +40,13 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
       <div className="flex justify-between items-center md:hidden gap-2">
           <h3 className="text-lg font-bold text-slate-800 dark:text-white">Ürünler</h3>
           <div className="flex gap-2">
+            <button 
+                onClick={onPrintBarcodes}
+                className="bg-slate-600 text-white p-2 rounded-lg shadow-md active:scale-95 transition-transform"
+                title="Barkod Yazdır"
+            >
+                <Printer size={20} />
+            </button>
             <button 
                 onClick={onBulkAdd}
                 className="bg-green-600 text-white p-2 rounded-lg shadow-md active:scale-95 transition-transform"
@@ -59,7 +68,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="Ürün ara..."
+            placeholder="Ürün adı veya barkod ara..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
@@ -76,6 +85,13 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
+        <button
+            onClick={onPrintBarcodes}
+            className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg transition-colors font-medium border border-slate-200 dark:border-slate-600"
+        >
+            <Printer size={18} />
+            <span className="hidden lg:inline">Barkod Yazdır</span>
+        </button>
       </div>
 
       {/* Product List - Responsive */}
@@ -103,10 +119,24 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
               <div className="flex-1">
                 <div className="flex items-start justify-between sm:block">
                     <div>
-                        <h3 className="font-bold text-slate-800 dark:text-white text-lg">{product.product_name}</h3>
-                        <span className="inline-block px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-md mt-1">
-                        {product.category}
-                        </span>
+                        <h3 className="font-bold text-slate-800 dark:text-white text-lg flex items-center gap-2">
+                          {product.product_name}
+                          {product.barcode && (
+                             <span className="hidden sm:flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700">
+                                <ScanBarcode size={10} /> {product.barcode}
+                             </span>
+                          )}
+                        </h3>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          <span className="inline-block px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-md">
+                          {product.category}
+                          </span>
+                          {product.barcode && (
+                             <span className="sm:hidden flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700">
+                                <ScanBarcode size={10} /> {product.barcode}
+                             </span>
+                          )}
+                        </div>
                     </div>
                     <div className={`sm:hidden px-3 py-1 rounded-lg border text-sm font-bold ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
                         {product.current_stock} {product.unit}

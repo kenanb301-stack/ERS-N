@@ -8,6 +8,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     min_stock_level: 50,
     unit: 'Paket',
     current_stock: 120,
+    barcode: '869000000001',
     created_at: '2023-10-01',
   },
   {
@@ -17,6 +18,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     min_stock_level: 20,
     unit: 'Bidon (5L)',
     current_stock: 15, // Critical
+    barcode: '869000000002',
     created_at: '2023-10-05',
   },
   {
@@ -26,6 +28,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     min_stock_level: 10,
     unit: 'Adet',
     current_stock: 45,
+    barcode: '869000000003',
     created_at: '2023-11-12',
   },
   {
@@ -35,6 +38,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     min_stock_level: 100,
     unit: 'Adet',
     current_stock: 80, // Critical
+    barcode: '869000000004',
     created_at: '2023-11-15',
   },
 ];

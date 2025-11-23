@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2 } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2, ScanBarcode } from 'lucide-react';
 import { Product, Transaction, TransactionType } from '../types';
+import BarcodeScanner from './BarcodeScanner';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -18,6 +19,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const [quantity, setQuantity] = useState<number | ''>('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
+  
+  // Barcode specific state
+  const [scannedBarcode, setScannedBarcode] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
 
   // Searchable Dropdown States
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +40,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         setSearchTerm(transactionToEdit.product_name || '');
         setError('');
         setIsDropdownOpen(false);
+        setScannedBarcode('');
       } else {
         // Create Mode
         setType(initialType);
@@ -44,6 +50,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         setError('');
         setSearchTerm('');
         setIsDropdownOpen(false);
+        setScannedBarcode('');
       }
     }
   }, [isOpen, initialType, transactionToEdit]);
@@ -67,14 +74,35 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const willBeNegative = !transactionToEdit && type === TransactionType.OUT && selectedProduct && quantity && (selectedProduct.current_stock - Number(quantity) < 0);
 
   const filteredProducts = products.filter(p => 
-    p.product_name.toLowerCase().includes(searchTerm.toLowerCase())
+    p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (p.barcode && p.barcode.includes(searchTerm))
   );
 
   const handleProductSelect = (product: Product) => {
     setProductId(product.id);
     setSearchTerm(product.product_name);
+    setScannedBarcode(product.barcode || '');
     setIsDropdownOpen(false);
     setError('');
+  };
+
+  const handleBarcodeSearch = (code: string) => {
+      setScannedBarcode(code);
+      const product = products.find(p => p.barcode === code.trim());
+      if (product) {
+          handleProductSelect(product);
+          // Optional: Focus quantity field here if needed
+          document.getElementById('quantityInput')?.focus();
+      } else {
+          setError(`"${code}" barkodlu ürün bulunamadı.`);
+          setProductId('');
+          setSearchTerm('');
+      }
+  };
+
+  const handleScanSuccess = (decodedText: string) => {
+      setShowScanner(false);
+      handleBarcodeSearch(decodedText);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -99,6 +127,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   };
 
   return (
+    <>
+    {showScanner && (
+        <BarcodeScanner 
+            onScanSuccess={handleScanSuccess} 
+            onClose={() => setShowScanner(false)} 
+        />
+    )}
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] transition-colors">
         {/* Header */}
@@ -146,6 +181,35 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               </button>
             </div>
 
+            {/* Barcode Fast Scan Input */}
+            {!transactionToEdit && (
+                <div className="flex gap-2 mb-2">
+                    <input 
+                        type="text"
+                        placeholder="Barkod tara veya yaz..."
+                        value={scannedBarcode}
+                        onChange={(e) => {
+                            setScannedBarcode(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleBarcodeSearch(scannedBarcode);
+                            }
+                        }}
+                        className="flex-1 p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg focus:border-blue-500 outline-none dark:bg-slate-700 dark:text-white"
+                        autoFocus
+                    />
+                    <button 
+                        type="button" 
+                        onClick={() => setShowScanner(true)}
+                        className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                        <ScanBarcode size={20} />
+                    </button>
+                </div>
+            )}
+
             {/* Searchable Product Input */}
             <div className="relative" ref={dropdownRef}>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Ürün</label>
@@ -187,7 +251,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-600 border-b border-slate-50 dark:border-slate-600 last:border-0 transition-colors flex justify-between items-center group"
                       >
                         <div>
-                            <div className="font-medium text-slate-800 dark:text-white group-hover:text-primary dark:group-hover:text-blue-400">{p.product_name}</div>
+                            <div className="font-medium text-slate-800 dark:text-white group-hover:text-primary dark:group-hover:text-blue-400">
+                                {p.product_name}
+                                {p.barcode && <span className="ml-2 text-xs text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">{p.barcode}</span>}
+                            </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">{p.category}</div>
                         </div>
                         <div className={`text-xs font-bold px-2 py-1 rounded ${p.current_stock <= p.min_stock_level ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
@@ -204,6 +271,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Miktar</label>
               <div className="relative">
                 <input
+                  id="quantityInput"
                   type="number"
                   value={quantity}
                   onChange={(e) => setQuantity(Number(e.target.value))}
@@ -286,6 +354,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         </div>
       </div>
     </div>
+    </>
   );
 };
 

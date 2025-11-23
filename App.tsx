@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun } from 'lucide-react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -8,6 +8,7 @@ import ProductModal from './components/ProductModal';
 import BulkTransactionModal from './components/BulkTransactionModal';
 import NegativeStockList from './components/NegativeStockList';
 import OrderSimulatorModal from './components/OrderSimulatorModal';
+import BarcodePrinterModal from './components/BarcodePrinterModal';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState } from './types';
 
@@ -15,9 +16,27 @@ import { Product, Transaction, TransactionType, ViewState } from './types';
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
 function App() {
-  // State Management
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
+  // State Management with LocalStorage persistence
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem('depopro_products');
+      return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+    } catch (e) {
+      console.error("Failed to load products from storage", e);
+      return INITIAL_PRODUCTS;
+    }
+  });
+
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    try {
+      const saved = localStorage.getItem('depopro_transactions');
+      return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS;
+    } catch (e) {
+      console.error("Failed to load transactions from storage", e);
+      return INITIAL_TRANSACTIONS;
+    }
+  });
+
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   
   // Modal States
@@ -32,6 +51,7 @@ function App() {
   const [bulkModalMode, setBulkModalMode] = useState<'TRANSACTION' | 'PRODUCT'>('TRANSACTION');
 
   const [isOrderSimModalOpen, setIsOrderSimModalOpen] = useState(false);
+  const [isBarcodePrinterOpen, setIsBarcodePrinterOpen] = useState(false);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -40,6 +60,15 @@ function App() {
     const saved = localStorage.getItem('darkMode');
     return saved ? JSON.parse(saved) : false;
   });
+
+  // Persistence Effects
+  useEffect(() => {
+    localStorage.setItem('depopro_products', JSON.stringify(products));
+  }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem('depopro_transactions', JSON.stringify(transactions));
+  }, [transactions]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -482,6 +511,7 @@ function App() {
                     onEdit={handleEditProductClick} 
                     onAddProduct={handleAddProductClick}
                     onBulkAdd={() => openBulkModal('PRODUCT')}
+                    onPrintBarcodes={() => setIsBarcodePrinterOpen(true)}
                 />
             )}
             {currentView === 'HISTORY' && (
@@ -534,6 +564,12 @@ function App() {
       <OrderSimulatorModal
         isOpen={isOrderSimModalOpen}
         onClose={() => setIsOrderSimModalOpen(false)}
+        products={products}
+      />
+      
+      <BarcodePrinterModal
+        isOpen={isBarcodePrinterOpen}
+        onClose={() => setIsBarcodePrinterOpen(false)}
         products={products}
       />
 
