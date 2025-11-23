@@ -59,11 +59,11 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
             <X size={24} />
         </button>
         <div className="p-4 border-b border-slate-100 dark:border-slate-700">
-            <h3 className="text-center font-bold text-slate-800 dark:text-white">Barkodu Okutun</h3>
+            <h3 className="text-center font-bold text-slate-800 dark:text-white">QR Kod / Barkod Tara</h3>
         </div>
         <div id="reader" className="w-full bg-black"></div>
         <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400">
-            Kamerayı barkoda doğru tutun.
+            Kamerayı koda doğru tutun.
         </div>
       </div>
     </div>

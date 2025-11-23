@@ -9,6 +9,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'Paket',
     current_stock: 120,
     barcode: '869000000001',
+    image_url: 'https://images.unsplash.com/photo-1583577317378-d56730592911?auto=format&fit=crop&q=80&w=200',
     created_at: '2023-10-01',
   },
   {
@@ -19,6 +20,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'Bidon (5L)',
     current_stock: 15, // Critical
     barcode: '869000000002',
+    image_url: 'https://images.unsplash.com/photo-1585670149967-b4f4da2ea866?auto=format&fit=crop&q=80&w=200',
     created_at: '2023-10-05',
   },
   {
@@ -29,6 +31,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'Adet',
     current_stock: 45,
     barcode: '869000000003',
+    image_url: 'https://images.unsplash.com/photo-1625766763788-95dcce9bf5ac?auto=format&fit=crop&q=80&w=200',
     created_at: '2023-11-12',
   },
   {
@@ -39,6 +42,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'Adet',
     current_stock: 80, // Critical
     barcode: '869000000004',
+    image_url: 'https://images.unsplash.com/photo-1622737133809-d95047b9e673?auto=format&fit=crop&q=80&w=200',
     created_at: '2023-11-15',
   },
 ];

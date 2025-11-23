@@ -10,7 +10,8 @@ export interface Product {
   min_stock_level: number;
   unit: string;
   current_stock: number;
-  barcode?: string; // New field
+  barcode?: string; // Bu alan artık QR kod içeriğini tutar
+  image_url?: string; // Yeni görsel alanı
   created_at?: string;
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, ScanBarcode } from 'lucide-react';
+import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, QrCode, Image as ImageIcon } from 'lucide-react';
 import { CATEGORIES, UNITS } from '../constants';
 import { Product } from '../types';
 import BarcodeScanner from './BarcodeScanner';
@@ -19,6 +19,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
   const [minStock, setMinStock] = useState<number>(10);
   const [initialStock, setInitialStock] = useState<number>(0);
   const [barcode, setBarcode] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [error, setError] = useState('');
   const [showScanner, setShowScanner] = useState(false);
 
@@ -32,7 +33,8 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
         setUnit(productToEdit.unit);
         setMinStock(productToEdit.min_stock_level);
         setInitialStock(productToEdit.current_stock);
-        setBarcode(productToEdit.barcode || ''); 
+        setBarcode(productToEdit.barcode || '');
+        setImageUrl(productToEdit.image_url || '');
       } else {
         // Yeni Ekleme Modu
         setName('');
@@ -41,6 +43,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
         setMinStock(10);
         setInitialStock(0);
         setBarcode('');
+        setImageUrl('');
       }
       setError('');
       setShowScanner(false);
@@ -62,7 +65,8 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
       unit,
       min_stock_level: Number(minStock),
       current_stock: Number(initialStock),
-      barcode: barcode.trim()
+      barcode: barcode.trim(),
+      image_url: imageUrl.trim()
     };
 
     onSubmit(formData);
@@ -112,8 +116,30 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
               </div>
             )}
 
+            {/* Görsel Önizleme ve URL */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Barkod</label>
+                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Ürün Görseli (URL)</label>
+                 <div className="flex gap-3 items-start">
+                    <div className="relative flex-1">
+                        <input
+                            type="text"
+                            value={imageUrl}
+                            onChange={(e) => setImageUrl(e.target.value)}
+                            placeholder="https://..."
+                            className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none pl-10"
+                        />
+                         <ImageIcon size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    </div>
+                    {imageUrl && (
+                        <div className="w-12 h-12 rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden bg-slate-50 flex-shrink-0">
+                            <img src={imageUrl} alt="Önizleme" className="w-full h-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
+                        </div>
+                    )}
+                 </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">QR Kod / Barkod</label>
               <div className="flex gap-2">
                   <input
                     type="text"
@@ -128,7 +154,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
                     className="p-3 bg-slate-100 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-500 transition-colors"
                     title="Kamerayı Aç"
                   >
-                      <ScanBarcode size={24} />
+                      <QrCode size={24} />
                   </button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, ScanBarcode, Printer } from 'lucide-react';
+import { Search, Filter, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, QrCode, Printer, Image as ImageIcon } from 'lucide-react';
 import { Product } from '../types';
 import { CATEGORIES } from '../constants';
 
@@ -43,7 +43,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
             <button 
                 onClick={onPrintBarcodes}
                 className="bg-slate-600 text-white p-2 rounded-lg shadow-md active:scale-95 transition-transform"
-                title="Barkod Yazdır"
+                title="Etiket Yazdır"
             >
                 <Printer size={20} />
             </button>
@@ -68,7 +68,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="Ürün adı veya barkod ara..."
+            placeholder="Ürün adı veya QR kod ara..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
@@ -90,7 +90,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
             className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg transition-colors font-medium border border-slate-200 dark:border-slate-600"
         >
             <Printer size={18} />
-            <span className="hidden lg:inline">Barkod Yazdır</span>
+            <span className="hidden lg:inline">Etiket Yazdır</span>
         </button>
       </div>
 
@@ -114,32 +114,43 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
           filteredProducts.map(product => (
             <div 
               key={product.id} 
-              className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-md transition-all relative"
+              className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-md transition-all relative group"
             >
-              <div className="flex-1">
-                <div className="flex items-start justify-between sm:block">
-                    <div>
-                        <h3 className="font-bold text-slate-800 dark:text-white text-lg flex items-center gap-2">
-                          {product.product_name}
-                          {product.barcode && (
-                             <span className="hidden sm:flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700">
-                                <ScanBarcode size={10} /> {product.barcode}
-                             </span>
-                          )}
-                        </h3>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          <span className="inline-block px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-md">
-                          {product.category}
-                          </span>
-                          {product.barcode && (
-                             <span className="sm:hidden flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700">
-                                <ScanBarcode size={10} /> {product.barcode}
-                             </span>
-                          )}
+              <div className="flex-1 flex gap-4 items-center">
+                {/* Product Image Thumbnail */}
+                <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-600 flex-shrink-0">
+                    {product.image_url ? (
+                        <img src={product.image_url} alt={product.product_name} className="w-full h-full object-cover" />
+                    ) : (
+                        <ImageIcon className="text-slate-300 dark:text-slate-500" size={24} />
+                    )}
+                </div>
+
+                <div className="flex-1">
+                    <div className="flex items-start justify-between sm:block">
+                        <div>
+                            <h3 className="font-bold text-slate-800 dark:text-white text-lg flex items-center gap-2">
+                            {product.product_name}
+                            {product.barcode && (
+                                <span className="hidden sm:flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700">
+                                    <QrCode size={10} /> {product.barcode}
+                                </span>
+                            )}
+                            </h3>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                            <span className="inline-block px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-md">
+                            {product.category}
+                            </span>
+                            {product.barcode && (
+                                <span className="sm:hidden flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700">
+                                    <QrCode size={10} /> {product.barcode}
+                                </span>
+                            )}
+                            </div>
                         </div>
-                    </div>
-                    <div className={`sm:hidden px-3 py-1 rounded-lg border text-sm font-bold ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
-                        {product.current_stock} {product.unit}
+                        <div className={`sm:hidden px-3 py-1 rounded-lg border text-sm font-bold ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
+                            {product.current_stock} {product.unit}
+                        </div>
                     </div>
                 </div>
               </div>

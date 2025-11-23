@@ -48,10 +48,15 @@
         .no-print {
           display: none !important;
         }
+        /* Yazdırma sırasında arkaplan grafiklerini zorla */
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
       }
     </style>
-    <!-- JsBarcode Global Yükleme -->
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/barcodes/JsBarcode.all.min.js"></script>
+    <!-- QRCode Kütüphanesi -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
   <script type="importmap">
 {
   "imports": {

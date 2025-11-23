@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2, ScanBarcode } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2, QrCode } from 'lucide-react';
 import { Product, Transaction, TransactionType } from '../types';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -94,7 +94,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
           // Optional: Focus quantity field here if needed
           document.getElementById('quantityInput')?.focus();
       } else {
-          setError(`"${code}" barkodlu ürün bulunamadı.`);
+          setError(`"${code}" kodlu ürün bulunamadı.`);
           setProductId('');
           setSearchTerm('');
       }
@@ -186,7 +186,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 <div className="flex gap-2 mb-2">
                     <input 
                         type="text"
-                        placeholder="Barkod tara veya yaz..."
+                        placeholder="QR Kod tara veya yaz..."
                         value={scannedBarcode}
                         onChange={(e) => {
                             setScannedBarcode(e.target.value);
@@ -205,7 +205,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         onClick={() => setShowScanner(true)}
                         className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                     >
-                        <ScanBarcode size={20} />
+                        <QrCode size={20} />
                     </button>
                 </div>
             )}
@@ -250,12 +250,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         onClick={() => handleProductSelect(p)}
                         className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-600 border-b border-slate-50 dark:border-slate-600 last:border-0 transition-colors flex justify-between items-center group"
                       >
-                        <div>
-                            <div className="font-medium text-slate-800 dark:text-white group-hover:text-primary dark:group-hover:text-blue-400">
-                                {p.product_name}
-                                {p.barcode && <span className="ml-2 text-xs text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">{p.barcode}</span>}
+                        <div className="flex items-center gap-3">
+                             {p.image_url && (
+                                 <img src={p.image_url} className="w-8 h-8 rounded object-cover" alt="" />
+                             )}
+                            <div>
+                                <div className="font-medium text-slate-800 dark:text-white group-hover:text-primary dark:group-hover:text-blue-400">
+                                    {p.product_name}
+                                    {p.barcode && <span className="ml-2 text-xs text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">{p.barcode}</span>}
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">{p.category}</div>
                             </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">{p.category}</div>
                         </div>
                         <div className={`text-xs font-bold px-2 py-1 rounded ${p.current_stock <= p.min_stock_level ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
                             {p.current_stock} {p.unit}
