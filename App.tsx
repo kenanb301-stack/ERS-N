@@ -58,7 +58,8 @@ function App() {
   // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : false;
+    // Default to true (Dark Mode) if no preference is saved
+    return saved ? JSON.parse(saved) : true;
   });
 
   // Persistence Effects
