@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, ScanLine, MapPin, Hexagon, Hash } from 'lucide-react';
-import { UNITS } from '../constants';
+import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, ScanLine, MapPin, Hexagon, Hash, LayoutGrid } from 'lucide-react';
+import { UNITS, CATEGORIES } from '../constants';
 import { Product } from '../types';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -16,6 +16,7 @@ interface ProductModalProps {
 const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, onDelete, productToEdit }) => {
   const [name, setName] = useState('');
   const [partCode, setPartCode] = useState('');
+  const [category, setCategory] = useState('');
   const [location, setLocation] = useState('');
   const [material, setMaterial] = useState('');
   const [unit, setUnit] = useState(UNITS[0]);
@@ -24,6 +25,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
   const [barcode, setBarcode] = useState('');
   const [error, setError] = useState('');
   const [showScanner, setShowScanner] = useState(false);
+  const [customCategory, setCustomCategory] = useState(false);
   
   // Form alanlarını duruma göre doldur veya sıfırla
   useEffect(() => {
@@ -32,6 +34,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
         // Düzenleme Modu
         setName(productToEdit.product_name);
         setPartCode(productToEdit.part_code || '');
+        setCategory(productToEdit.category || 'Genel');
         setLocation(productToEdit.location || '');
         setMaterial(productToEdit.material || '');
         setUnit(productToEdit.unit);
@@ -42,6 +45,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
         // Yeni Ekleme Modu
         setName('');
         setPartCode('');
+        setCategory('Genel');
         setLocation('');
         setMaterial('');
         setUnit(UNITS[0]);
@@ -51,6 +55,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
       }
       setError('');
       setShowScanner(false);
+      setCustomCategory(false);
     }
   }, [isOpen, productToEdit]);
 
@@ -66,6 +71,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
     const formData = {
       product_name: name,
       part_code: partCode.trim(),
+      category: category.trim(),
       location: location.trim(),
       material: material.trim(),
       unit,
@@ -161,6 +167,49 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
                 placeholder="Örn: BASKI LAMASI"
                 className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none font-bold"
               />
+            </div>
+
+            {/* Kategori Seçimi */}
+            <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Kategori</label>
+                <div className="relative">
+                    {customCategory ? (
+                        <div className="flex gap-2">
+                             <input
+                                type="text"
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                                placeholder="Yeni kategori adı..."
+                                className="w-full pl-9 p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                                autoFocus
+                            />
+                            <button 
+                                type="button" 
+                                onClick={() => { setCustomCategory(false); setCategory(CATEGORIES[0]); }}
+                                className="px-3 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                                Seç
+                            </button>
+                        </div>
+                    ) : (
+                        <select
+                            value={category}
+                            onChange={(e) => {
+                                if (e.target.value === 'OTHER') {
+                                    setCustomCategory(true);
+                                    setCategory('');
+                                } else {
+                                    setCategory(e.target.value);
+                                }
+                            }}
+                            className="w-full pl-9 p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none appearance-none"
+                        >
+                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            <option value="OTHER">+ Yeni Kategori Ekle...</option>
+                        </select>
+                    )}
+                    <LayoutGrid size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-500" />
+                </div>
             </div>
 
             {/* Hammadde */}

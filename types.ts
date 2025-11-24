@@ -8,6 +8,7 @@ export interface Product {
   id: string;
   product_name: string; // "Açıklama" olarak kullanılacak
   part_code?: string;   // Örn: P-00003
+  category?: string;    // YENİ: Kategori (Örn: Hırdavat, Hammadde)
   location?: string;    // Örn: B1-06-06 (Reyon)
   material?: string;    // Örn: ST37 SOĞUK ÇEKME (Hammadde)
   min_stock_level: number;
@@ -30,7 +31,7 @@ export interface Transaction {
   new_stock?: number;
 }
 
-export type ViewState = 'DASHBOARD' | 'INVENTORY' | 'HISTORY' | 'NEGATIVE_STOCK';
+export type ViewState = 'DASHBOARD' | 'INVENTORY' | 'HISTORY' | 'NEGATIVE_STOCK' | 'ANALYTICS';
 
 export interface TransactionFormData {
   productId: string;

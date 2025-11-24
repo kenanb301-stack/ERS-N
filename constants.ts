@@ -6,6 +6,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'p-1',
     product_name: 'BASKI LAMASI',
     part_code: 'P-00003',
+    category: 'Hammadde',
     location: 'B1-06-06',
     material: 'ST37 SOĞUK ÇEKME',
     min_stock_level: 5,
@@ -18,6 +19,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'p-2',
     product_name: 'HİDROLİK PİSTON MİLİ',
     part_code: 'H-20402',
+    category: 'Yedek Parça',
     location: 'A2-12-01',
     material: 'CK45 KROM KAPLI',
     min_stock_level: 2,
@@ -30,6 +32,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     id: 'p-3',
     product_name: 'CIVATA M12x40',
     part_code: 'C-1240-88',
+    category: 'Hırdavat',
     location: 'K4-01-05',
     material: '8.8 ÇELİK',
     min_stock_level: 100,
@@ -68,3 +71,5 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
 ];
 
 export const UNITS = ['Adet', 'Metre', 'Kg', 'Litre', 'Takım', 'Paket'];
+
+export const CATEGORIES = ['Genel', 'Hammadde', 'Yedek Parça', 'Hırdavat', 'Elektronik', 'Sarf Malzeme', 'Kırtasiye'];

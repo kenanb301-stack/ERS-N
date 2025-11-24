@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -11,6 +11,7 @@ import NegativeStockList from './components/NegativeStockList';
 import OrderSimulatorModal from './components/OrderSimulatorModal';
 import BarcodePrinterModal from './components/BarcodePrinterModal';
 import BarcodeScanner from './components/BarcodeScanner';
+import Analytics from './components/Analytics';
 import Login from './components/Login';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState, User } from './types';
@@ -386,6 +387,7 @@ function App() {
 
   const navItems = [
     { id: 'DASHBOARD', label: 'Özet', icon: LayoutDashboard },
+    { id: 'ANALYTICS', label: 'Analiz', icon: BarChart3 }, // Yeni Menü
     { id: 'INVENTORY', label: 'Stok', icon: Package },
     { id: 'HISTORY', label: 'Geçmiş', icon: History },
   ];
@@ -493,6 +495,7 @@ function App() {
             <div className="mb-6 flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
                     {currentView === 'DASHBOARD' && 'Genel Bakış'}
+                    {currentView === 'ANALYTICS' && 'Analiz Raporları'}
                     {currentView === 'INVENTORY' && 'Stok Listesi'}
                     {currentView === 'HISTORY' && 'Hareket Geçmişi'}
                     {currentView === 'NEGATIVE_STOCK' && 'Dikkat Gerektiren Ürünler'}
@@ -526,6 +529,12 @@ function App() {
                     onOrderSimulation={() => setIsOrderSimModalOpen(true)}
                     onScan={handleGlobalScanClick}
                     currentUser={currentUser}
+                />
+            )}
+            {currentView === 'ANALYTICS' && (
+                <Analytics 
+                    products={products}
+                    transactions={transactions}
                 />
             )}
             {currentView === 'INVENTORY' && (
@@ -563,19 +572,19 @@ function App() {
             {/* Dashboard Tab */}
             <button 
                 onClick={() => setCurrentView('DASHBOARD')}
-                className={`flex flex-col items-center justify-center w-16 space-y-1 ${currentView === 'DASHBOARD' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
+                className={`flex flex-col items-center justify-center w-14 space-y-1 ${currentView === 'DASHBOARD' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
             >
-                <LayoutDashboard size={24} className={currentView === 'DASHBOARD' ? 'fill-current' : ''} />
-                <span className="text-[10px] font-medium">Özet</span>
+                <LayoutDashboard size={20} className={currentView === 'DASHBOARD' ? 'fill-current' : ''} />
+                <span className="text-[9px] font-medium">Özet</span>
             </button>
 
             {/* Inventory Tab */}
             <button 
                 onClick={() => setCurrentView('INVENTORY')}
-                className={`flex flex-col items-center justify-center w-16 space-y-1 ${currentView === 'INVENTORY' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
+                className={`flex flex-col items-center justify-center w-14 space-y-1 ${currentView === 'INVENTORY' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
             >
-                <Package size={24} className={currentView === 'INVENTORY' ? 'fill-current' : ''} />
-                <span className="text-[10px] font-medium">Stok</span>
+                <Package size={20} className={currentView === 'INVENTORY' ? 'fill-current' : ''} />
+                <span className="text-[9px] font-medium">Stok</span>
             </button>
 
             {/* CENTRAL FLOATING SCAN BUTTON - ONLY ADMIN */}
@@ -589,27 +598,22 @@ function App() {
                 </button>
             </div>
 
+            {/* Analytics Tab (NEW) */}
+            <button 
+                onClick={() => setCurrentView('ANALYTICS')}
+                className={`flex flex-col items-center justify-center w-14 space-y-1 ${currentView === 'ANALYTICS' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
+            >
+                <BarChart3 size={20} />
+                <span className="text-[9px] font-medium">Analiz</span>
+            </button>
+
             {/* History Tab */}
             <button 
                 onClick={() => setCurrentView('HISTORY')}
-                className={`flex flex-col items-center justify-center w-16 space-y-1 ${currentView === 'HISTORY' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
+                className={`flex flex-col items-center justify-center w-14 space-y-1 ${currentView === 'HISTORY' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
             >
-                <History size={24} />
-                <span className="text-[10px] font-medium">Geçmiş</span>
-            </button>
-
-            {/* Negative Stock / Alert Tab */}
-            <button 
-                onClick={() => setCurrentView('NEGATIVE_STOCK')}
-                className={`flex flex-col items-center justify-center w-16 space-y-1 ${currentView === 'NEGATIVE_STOCK' ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}
-            >
-                <div className="relative">
-                    <AlertTriangle size={24} className={currentView === 'NEGATIVE_STOCK' ? 'fill-current' : ''} />
-                    {hasNegativeStock && (
-                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-600 border-2 border-white dark:border-slate-800 rounded-full"></span>
-                    )}
-                </div>
-                <span className="text-[10px] font-medium">Uyarı</span>
+                <History size={20} />
+                <span className="text-[9px] font-medium">Geçmiş</span>
             </button>
         </div>
       </div>
