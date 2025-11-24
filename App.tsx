@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud } from 'lucide-react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -14,8 +14,10 @@ import BarcodeScanner from './components/BarcodeScanner';
 import Analytics from './components/Analytics';
 import Login from './components/Login';
 import DataBackupModal from './components/DataBackupModal';
+import CloudSetupModal from './components/CloudSetupModal';
+import { saveToCloud, loadFromCloud } from './services/googleSheets';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
-import { Product, Transaction, TransactionType, ViewState, User } from './types';
+import { Product, Transaction, TransactionType, ViewState, User, CloudConfig } from './types';
 
 // Utility to generate simple ID
 const generateId = () => Math.random().toString(36).substring(2, 11);
@@ -48,6 +50,13 @@ function App() {
     }
   });
 
+  const [cloudConfig, setCloudConfig] = useState<CloudConfig | null>(() => {
+      const saved = localStorage.getItem('depopro_cloud_config');
+      return saved ? JSON.parse(saved) : null;
+  });
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   
   // Modal States
@@ -65,6 +74,7 @@ function App() {
   const [isOrderSimModalOpen, setIsOrderSimModalOpen] = useState(false);
   const [isBarcodePrinterOpen, setIsBarcodePrinterOpen] = useState(false);
   const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
+  const [isCloudSetupOpen, setIsCloudSetupOpen] = useState(false);
 
   // Global Scanner State
   const [isGlobalScannerOpen, setIsGlobalScannerOpen] = useState(false);
@@ -120,6 +130,50 @@ function App() {
 
   // Check for negative stock
   const hasNegativeStock = products.some(p => p.current_stock < 0);
+
+  // --- CLOUD SYNC LOGIC (GOOGLE SHEETS) ---
+  const handleSaveCloudConfig = (url: string) => {
+      const newConfig = { scriptUrl: url };
+      setCloudConfig(newConfig);
+      localStorage.setItem('depopro_cloud_config', JSON.stringify(newConfig));
+  };
+
+  const handleCloudUpload = async () => {
+      if (!cloudConfig?.scriptUrl) {
+          setIsCloudSetupOpen(true);
+          return;
+      }
+      
+      setIsSyncing(true);
+      const result = await saveToCloud(cloudConfig.scriptUrl, {
+          products,
+          transactions,
+          lastUpdated: new Date().toISOString()
+      });
+      setIsSyncing(false);
+      
+      alert(result.message);
+  };
+
+  const handleCloudDownload = async () => {
+       if (!cloudConfig?.scriptUrl) {
+          setIsCloudSetupOpen(true);
+          return;
+      }
+
+      if (!confirm("Buluttaki veriler cihazınızdaki verilerin üzerine yazılacak. Onaylıyor musunuz?")) return;
+
+      setIsSyncing(true);
+      const result = await loadFromCloud(cloudConfig.scriptUrl);
+      setIsSyncing(false);
+
+      if (result.success && result.data) {
+          saveData(result.data.products, result.data.transactions);
+          alert("Veriler başarıyla güncellendi.");
+      } else {
+          alert(result.message);
+      }
+  };
 
   // --- DATA SYNC LOGIC (FILE BACKUP) ---
   const handleBackupData = () => {
@@ -585,12 +639,45 @@ function App() {
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
              {currentUser.role === 'ADMIN' && (
                  <>
+                    {/* Cloud Sync Buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                        <button 
+                            onClick={handleCloudUpload}
+                            disabled={isSyncing}
+                            className="flex flex-col items-center justify-center p-2 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all disabled:opacity-50"
+                            title="Buluta Yükle"
+                        >
+                            <UploadCloud size={20} className="mb-1" />
+                            {isSyncing ? '...' : 'Yükle'}
+                        </button>
+                        <button 
+                            onClick={handleCloudDownload}
+                            disabled={isSyncing}
+                            className="flex flex-col items-center justify-center p-2 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 text-purple-600 dark:text-purple-400 text-xs font-bold transition-all disabled:opacity-50"
+                            title="Buluttan İndir"
+                        >
+                            <DownloadCloud size={20} className="mb-1" />
+                            {isSyncing ? '...' : 'İndir'}
+                        </button>
+                    </div>
+
+                    <button 
+                        onClick={() => setIsCloudSetupOpen(true)}
+                        className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-slate-400"
+                    >
+                        <Cloud size={14} /> Drive Ayarları
+                    </button>
+                 </>
+             )}
+
+             {currentUser.role === 'ADMIN' && (
+                 <>
                     <button 
                         onClick={() => setIsDataBackupOpen(true)}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all bg-slate-50 hover:bg-slate-100 dark:bg-slate-700/50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+                        className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
                     >
-                        <DatabaseIcon size={20} className="text-slate-500" />
-                        Veri Yedekleme
+                        <DatabaseIcon size={18} className="text-slate-500" />
+                        Yerel Yedek
                     </button>
                  </>
              )}
@@ -602,13 +689,12 @@ function App() {
                 <div className="flex items-center gap-2">
                     {isDarkMode ? <Moon size={18} className="text-purple-400" /> : <Sun size={18} className="text-amber-500" />}
                     <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                        {isDarkMode ? 'Karanlık Mod' : 'Aydınlık Mod'}
+                        {isDarkMode ? 'Karanlık' : 'Aydınlık'}
                     </span>
                 </div>
              </button>
 
             <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4">
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Giriş yapan kullanıcı</p>
                 <div className="flex items-center justify-between mt-1">
                   <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{currentUser.name}</p>
                   <button onClick={handleLogout} className="text-red-500 hover:text-red-700" title="Çıkış Yap">
@@ -628,10 +714,18 @@ function App() {
             <Package className="fill-blue-600 text-white" size={24} />
             <span className="dark:text-white text-slate-800">DepoPro</span>
         </h1>
-        <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 mr-1 hidden sm:inline">{currentUser.name}</span>
+        <div className="flex items-center gap-3">
+            {currentUser.role === 'ADMIN' && (
+                <button 
+                    onClick={handleCloudDownload}
+                    className="p-2 text-purple-600 bg-purple-50 dark:bg-purple-900/20 rounded-lg active:scale-95"
+                    title="Buluttan Çek"
+                >
+                    <DownloadCloud size={20} />
+                </button>
+            )}
             <button onClick={handleLogout} className="p-2 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                <LogOut size={18} />
+                <LogOut size={20} />
             </button>
         </div>
       </div>
@@ -639,7 +733,7 @@ function App() {
       {/* Main Content Area */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto h-auto min-h-[calc(100vh-140px)] md:h-screen pb-24 md:pb-8">
         <div className="max-w-5xl mx-auto">
-            <div className="mb-6 flex justify-between items-center">
+            <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
                     {currentView === 'DASHBOARD' && 'Genel Bakış'}
                     {currentView === 'ANALYTICS' && 'Analiz Raporları'}
@@ -647,20 +741,41 @@ function App() {
                     {currentView === 'HISTORY' && 'Hareket Geçmişi'}
                     {currentView === 'NEGATIVE_STOCK' && 'Dikkat Gerektiren Ürünler'}
                 </h2>
-                {currentView === 'INVENTORY' && currentUser.role === 'ADMIN' && (
+                
+                {currentUser.role === 'ADMIN' && (
                     <div className="flex gap-2">
-                        <button 
-                            onClick={() => openBulkModal('PRODUCT')}
-                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-green-200 dark:shadow-none"
-                        >
-                            <FileSpreadsheet size={18} /> <span className="hidden sm:inline">Excel Yükle</span>
-                        </button>
-                        <button 
-                            onClick={handleAddProductClick}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-blue-200 dark:shadow-none"
-                        >
-                            <Plus size={18} /> <span className="hidden sm:inline">Ürün Ekle</span>
-                        </button>
+                        {/* Mobile Only Extra Sync Buttons */}
+                        <div className="md:hidden flex gap-2">
+                            <button 
+                                onClick={handleCloudUpload}
+                                className="bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+                            >
+                                <UploadCloud size={18} /> Yükle
+                            </button>
+                             <button 
+                                onClick={() => setIsCloudSetupOpen(true)}
+                                className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium"
+                            >
+                                <Cloud size={18} />
+                            </button>
+                        </div>
+
+                        {currentView === 'INVENTORY' && (
+                            <>
+                                <button 
+                                    onClick={() => openBulkModal('PRODUCT')}
+                                    className="hidden sm:flex bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium items-center gap-2 transition-colors shadow-lg shadow-green-200 dark:shadow-none"
+                                >
+                                    <FileSpreadsheet size={18} /> <span className="hidden sm:inline">Excel Yükle</span>
+                                </button>
+                                <button 
+                                    onClick={handleAddProductClick}
+                                    className="hidden sm:flex bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium items-center gap-2 transition-colors shadow-lg shadow-blue-200 dark:shadow-none"
+                                >
+                                    <Plus size={18} /> <span className="hidden sm:inline">Ürün Ekle</span>
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
@@ -800,6 +915,13 @@ function App() {
                 onClose={() => setIsDataBackupOpen(false)}
                 onBackup={handleBackupData}
                 onRestore={handleRestoreData}
+            />
+
+            <CloudSetupModal 
+                isOpen={isCloudSetupOpen}
+                onClose={() => setIsCloudSetupOpen(false)}
+                onSave={handleSaveCloudConfig}
+                currentUrl={cloudConfig?.scriptUrl}
             />
         </>
       )}

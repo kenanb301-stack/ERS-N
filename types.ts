@@ -48,3 +48,8 @@ export interface User {
   name: string;
   role: UserRole;
 }
+
+export interface CloudConfig {
+  scriptUrl: string;
+  lastSync?: string;
+}
