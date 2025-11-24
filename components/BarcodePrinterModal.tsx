@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { X, Printer, CheckSquare, Square, QrCode, Image as ImageIcon } from 'lucide-react';
 import { Product } from '../types';
@@ -14,8 +15,8 @@ interface BarcodePrinterModalProps {
 const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClose, products }) => {
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
 
-  // Products that have a barcode value (for QR generation)
-  const validProducts = products.filter(p => p.barcode && p.barcode.trim().length > 0);
+  // Products that have a barcode value
+  const validProducts = products.filter(p => (p.barcode && p.barcode.trim().length > 0) || (p.part_code && p.part_code.trim().length > 0));
 
   useEffect(() => {
     if (isOpen) {
@@ -32,9 +33,10 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 const product = validProducts.find(p => p.id === id);
                 if (product) {
                     try {
+                        const codeToUse = product.barcode || product.part_code;
                         const canvas = document.getElementById(`qr-canvas-${id}`) as HTMLCanvasElement;
-                        if (canvas) {
-                            QRCode.toCanvas(canvas, product.barcode, { 
+                        if (canvas && codeToUse) {
+                            QRCode.toCanvas(canvas, codeToUse, { 
                                 width: 80,
                                 margin: 0,
                                 errorCorrectionLevel: 'M'
@@ -83,7 +85,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
           <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <Printer size={24} className="text-blue-600 dark:text-blue-400" />
-            Ürün Etiketi Yazdır (QR + Görsel)
+            Etiket Yazdır (Reyon + Parça Kodu)
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <X size={24} />
@@ -117,44 +119,38 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         {/* Preview Area (Scrollable) */}
         <div className="flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900">
             
-            {/* Warning for products without barcodes */}
-            {validProducts.length < products.length && (
-                <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-sm rounded-lg border border-amber-100 dark:border-amber-900/30">
-                    <strong>Bilgi:</strong> {products.length - validProducts.length} adet ürünün QR kodu/barkodu tanımlı olmadığı için listede görünmüyor. Önce ürün düzenlemeden kod ekleyiniz.
-                </div>
-            )}
-
             {/* Print Layout Grid */}
             <div id="print-area" className="grid grid-cols-2 lg:grid-cols-3 gap-4 print:grid-cols-2 print:gap-4">
                 {validProducts.filter(p => selectedProductIds.has(p.id)).map(product => (
                     <div 
                         key={product.id} 
-                        className="bg-white p-3 rounded-xl border border-slate-300 shadow-sm flex items-center justify-between print:border print:border-black print:shadow-none break-inside-avoid h-[140px] overflow-hidden"
+                        className="bg-white p-4 rounded-xl border border-slate-300 shadow-sm flex justify-between print:border-2 print:border-black print:shadow-none break-inside-avoid h-[160px] overflow-hidden relative"
                     >
-                        {/* Sol Taraf: Bilgi ve QR */}
+                        {/* Sol Taraf: Bilgiler */}
                         <div className="flex flex-col h-full justify-between flex-1 pr-2">
                              <div>
-                                <h3 className="text-sm font-bold text-black leading-tight mb-1 line-clamp-2">
+                                <div className="inline-block bg-black text-white px-2 py-0.5 text-xs font-bold mb-1">
+                                    REYON: {product.location || 'BELİRSİZ'}
+                                </div>
+                                <h3 className="text-lg font-extrabold text-black leading-tight mb-1 line-clamp-2 uppercase">
                                     {product.product_name}
                                 </h3>
-                                <span className="text-[10px] text-slate-500 uppercase tracking-wide print:text-black">{product.category}</span>
+                                <div className="text-sm font-bold font-mono border border-black inline-block px-1">
+                                    {product.part_code || '-'}
+                                </div>
                              </div>
                              
-                             <div className="flex items-end gap-2 mt-1">
-                                <canvas id={`qr-canvas-${product.id}`} className="w-[80px] h-[80px]"></canvas>
-                                <div className="text-[10px] font-mono text-slate-600 print:text-black -mb-1">
-                                    {product.barcode}
-                                </div>
+                             <div className="text-[10px] text-slate-500 print:text-black font-bold uppercase">
+                                {product.material ? `MALZEME: ${product.material}` : ''}
                              </div>
                         </div>
 
-                        {/* Sağ Taraf: Ürün Görseli */}
-                        <div className="w-[100px] h-full bg-slate-50 rounded-lg overflow-hidden border border-slate-200 print:border-slate-300 flex items-center justify-center">
-                            {product.image_url ? (
-                                <img src={product.image_url} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                                <ImageIcon className="text-slate-300 print:text-slate-400" size={32} />
-                            )}
+                        {/* Sağ Taraf: QR Kod */}
+                        <div className="flex flex-col items-end justify-between w-[85px]">
+                            <canvas id={`qr-canvas-${product.id}`} className="w-[80px] h-[80px]"></canvas>
+                            <span className="text-[9px] text-center w-full font-mono text-slate-600 print:text-black mt-1">
+                                {product.barcode || product.part_code}
+                            </span>
                         </div>
                     </div>
                 ))}

@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, QrCode, Printer, Image as ImageIcon } from 'lucide-react';
+import { Search, Filter, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, QrCode, Printer, Image as ImageIcon, MapPin, Hexagon } from 'lucide-react';
 import { Product } from '../types';
 import { CATEGORIES } from '../constants';
 
@@ -19,8 +20,11 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
-      const matchesSearch = product.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            (product.barcode && product.barcode.includes(searchTerm));
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = product.product_name.toLowerCase().includes(term) || 
+                            (product.part_code && product.part_code.toLowerCase().includes(term)) ||
+                            (product.location && product.location.toLowerCase().includes(term)) ||
+                            (product.barcode && product.barcode.includes(term));
       const matchesCategory = selectedCategory === 'Tümü' || product.category === selectedCategory;
       return matchesSearch && matchesCategory;
     });
@@ -38,7 +42,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
       
       {/* Mobile Header Actions */}
       <div className="flex justify-between items-center md:hidden gap-2">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-white">Ürünler</h3>
+          <h3 className="text-lg font-bold text-slate-800 dark:text-white">Stok Listesi</h3>
           <div className="flex gap-2">
             <button 
                 onClick={onPrintBarcodes}
@@ -68,7 +72,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="Ürün adı veya QR kod ara..."
+            placeholder="Parça Kodu, Adı veya Reyon ara..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
@@ -99,10 +103,10 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
         {filteredProducts.length === 0 ? (
           <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
             <Package className="mx-auto text-slate-300 dark:text-slate-600 mb-2" size={48} />
-            <p className="text-slate-500 dark:text-slate-400">Ürün bulunamadı.</p>
+            <p className="text-slate-500 dark:text-slate-400">Kayıtlı parça/ürün bulunamadı.</p>
             <div className="flex justify-center gap-3 mt-4">
                 <button onClick={onAddProduct} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
-                    Yeni Ürün Ekle
+                    Yeni Parça Ekle
                 </button>
                 <span className="text-slate-300 dark:text-slate-600">|</span>
                 <button onClick={onBulkAdd} className="text-green-600 dark:text-green-400 font-medium hover:underline">
@@ -116,9 +120,9 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
               key={product.id} 
               className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-md transition-all relative group"
             >
-              <div className="flex-1 flex gap-4 items-center">
+              <div className="flex-1 flex gap-4 items-start sm:items-center">
                 {/* Product Image Thumbnail */}
-                <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-600 flex-shrink-0">
+                <div className="w-20 h-20 sm:w-16 sm:h-16 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-600 flex-shrink-0">
                     {product.image_url ? (
                         <img src={product.image_url} alt={product.product_name} className="w-full h-full object-cover" />
                     ) : (
@@ -126,45 +130,60 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
                     )}
                 </div>
 
-                <div className="flex-1">
-                    <div className="flex items-start justify-between sm:block">
-                        <div>
-                            <h3 className="font-bold text-slate-800 dark:text-white text-lg flex items-center gap-2">
-                            {product.product_name}
-                            {product.barcode && (
-                                <span className="hidden sm:flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700">
-                                    <QrCode size={10} /> {product.barcode}
-                                </span>
-                            )}
-                            </h3>
-                            <div className="flex flex-wrap gap-2 mt-1">
-                            <span className="inline-block px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-md">
-                            {product.category}
-                            </span>
-                            {product.barcode && (
-                                <span className="sm:hidden flex items-center gap-1 text-[10px] text-slate-400 border border-slate-200 dark:border-slate-600 px-1.5 py-0.5 rounded bg-slate-50 dark:bg-slate-700">
-                                    <QrCode size={10} /> {product.barcode}
-                                </span>
-                            )}
+                <div className="flex-1 w-full">
+                    <div className="flex flex-col gap-1">
+                        <div className="flex justify-between items-start w-full">
+                            <div>
+                                {/* Parça Kodu ve Adı */}
+                                {product.part_code && (
+                                    <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded mb-1 inline-block">
+                                        {product.part_code}
+                                    </span>
+                                )}
+                                <h3 className="font-bold text-slate-800 dark:text-white text-lg leading-tight">
+                                    {product.product_name}
+                                </h3>
+                            </div>
+                            <div className={`sm:hidden px-3 py-1 rounded-lg border text-sm font-bold whitespace-nowrap ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
+                                {product.current_stock} <span className="text-xs font-normal">{product.unit}</span>
                             </div>
                         </div>
-                        <div className={`sm:hidden px-3 py-1 rounded-lg border text-sm font-bold ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
-                            {product.current_stock} {product.unit}
+                        
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            {/* Reyon Bilgisi */}
+                            {product.location && (
+                                <div className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+                                    <MapPin size={14} className="text-orange-500" />
+                                    <span>{product.location}</span>
+                                </div>
+                            )}
+                            
+                            {/* Hammadde */}
+                            {product.material && (
+                                <div className="flex items-center gap-1">
+                                    <Hexagon size={14} className="text-slate-400" />
+                                    <span className="line-clamp-1">{product.material}</span>
+                                </div>
+                            )}
+
+                            <span className="text-xs px-2 py-0.5 bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600 rounded text-slate-500">
+                                {product.category}
+                            </span>
                         </div>
                     </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between sm:justify-end gap-6">
+              <div className="flex items-center justify-between sm:justify-end gap-6 mt-2 sm:mt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-700 pt-3 sm:pt-0">
                 
                 <div className="hidden sm:block text-right min-w-[100px]">
-                    <div className={`px-3 py-1 rounded-lg border text-sm font-bold inline-block ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
-                        {product.current_stock} {product.unit}
+                    <div className={`px-3 py-1 rounded-lg border text-lg font-bold inline-block ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
+                        {product.current_stock} <span className="text-sm font-normal opacity-80">{product.unit}</span>
                     </div>
                     <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">Min: {product.min_stock_level}</div>
                 </div>
 
-                <div className="flex items-center gap-2 border-t border-slate-100 dark:border-slate-700 pt-3 sm:border-t-0 sm:pt-0 w-full sm:w-auto justify-end">
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                     <button 
                         type="button"
                         onClick={(e) => {

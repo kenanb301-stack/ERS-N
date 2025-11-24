@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Download, PackagePlus, ArrowRightLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -65,13 +66,14 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
         // Basic validation based on mode
         const firstRow = data[0] as any;
         if (mode === 'TRANSACTION') {
-             if (!firstRow.hasOwnProperty('Urun') || !firstRow.hasOwnProperty('Miktar')) {
-                setError('Hatalı format! Stok Hareketi için "Urun" ve "Miktar" sütunları gereklidir.');
+             // Parça Kodu veya Ürün Adı ile eşleşme arayacağız
+             if (!firstRow.hasOwnProperty('Miktar') && (!firstRow.hasOwnProperty('ParcaKodu') && !firstRow.hasOwnProperty('Urun'))) {
+                setError('Hatalı format! Stok Hareketi için "ParcaKodu" (veya "Urun") ve "Miktar" sütunları gereklidir.');
                 return;
             }
         } else {
-            if (!firstRow.hasOwnProperty('UrunAdi')) {
-                setError('Hatalı format! Ürün Listesi için "UrunAdi" sütunu gereklidir.');
+            if (!firstRow.hasOwnProperty('Aciklama') && !firstRow.hasOwnProperty('UrunAdi')) {
+                setError('Hatalı format! Ürün Listesi için "Aciklama" veya "UrunAdi" sütunu gereklidir.');
                 return;
             }
         }
@@ -91,16 +93,16 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
 
     if (mode === 'TRANSACTION') {
         data = [
-            { "Urun": "A4 Fotokopi Kağıdı", "Miktar": 10, "Islem": "GIRIS", "Aciklama": "Toplu Alım" },
-            { "Urun": "USB-C Kablo", "Miktar": 5, "Islem": "CIKIS", "Aciklama": "Departman Dağıtımı" }
+            { "ParcaKodu": "P-00003", "Aciklama": "BASKI LAMASI", "Miktar": 10, "Islem": "GIRIS", "Not": "İmalat" },
+            { "ParcaKodu": "H-20402", "Aciklama": "HİDROLİK PİSTON", "Miktar": 5, "Islem": "CIKIS", "Not": "Montaj" }
         ];
         filename = "sablon_stok_hareketi.xlsx";
     } else {
         data = [
-            { "UrunAdi": "Yeni Kalem", "Kategori": "Kırtasiye", "Birim": "Adet", "KritikStok": 10, "BaslangicStogu": 100 },
-            { "UrunAdi": "Sıvı Sabun", "Kategori": "Temizlik", "Birim": "Litre", "KritikStok": 5, "BaslangicStogu": 20 }
+            { "ParcaKodu": "P-00003", "Aciklama": "BASKI LAMASI", "Reyon": "B1-06-06", "Hammadde": "ST37", "Birim": "Adet", "KritikStok": 5, "BaslangicStogu": 3, "Kategori": "Yedek Parça" },
+            { "ParcaKodu": "H-20402", "Aciklama": "PISTON MILI", "Reyon": "A2-12-01", "Hammadde": "CK45", "Birim": "Adet", "KritikStok": 2, "BaslangicStogu": 10, "Kategori": "Hidrolik" }
         ];
-        filename = "sablon_yeni_urunler.xlsx";
+        filename = "sablon_yeni_parcalar.xlsx";
     }
 
     const ws = XLSX.utils.json_to_sheet(data);
@@ -122,20 +124,28 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
     const errors: string[] = [];
 
     parsedData.forEach((row: any, index) => {
-      const productName = row['Urun'] || row['Ürün'];
+      const partCode = row['ParcaKodu'] || row['Parça Kodu'];
+      const productName = row['Aciklama'] || row['Urun'] || row['Ürün'];
       const quantity = row['Miktar'];
       const typeRaw = row['Islem'] || row['İşlem'] || 'GIRIS';
-      const desc = row['Aciklama'] || row['Açıklama'] || 'Toplu İşlem';
+      const desc = row['Not'] || row['Aciklama'] || 'Toplu İşlem';
 
-      if (!productName || !quantity) {
-        errors.push(`Satır ${index + 2}: Ürün adı veya miktar eksik.`);
+      if ((!partCode && !productName) || !quantity) {
+        errors.push(`Satır ${index + 2}: Parça kodu/adı veya miktar eksik.`);
         return;
       }
 
-      const product = products.find(p => p.product_name.toLowerCase() === productName.trim().toLowerCase());
+      // Find by Part Code first, then by Name
+      let product = undefined;
+      if (partCode) {
+          product = products.find(p => p.part_code === partCode.toString().trim());
+      }
+      if (!product && productName) {
+          product = products.find(p => p.product_name.toLowerCase() === productName.toString().trim().toLowerCase());
+      }
 
       if (!product) {
-        errors.push(`Satır ${index + 2}: "${productName}" sistemde bulunamadı. Önce ürünü ekleyin.`);
+        errors.push(`Satır ${index + 2}: "${partCode || productName}" sistemde bulunamadı.`);
         return;
       }
 
@@ -166,25 +176,36 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
     const errors: string[] = [];
 
     parsedData.forEach((row: any, index) => {
-        const name = row['UrunAdi'] || row['Ürün Adı'];
+        const partCode = row['ParcaKodu'] || row['Parça Kodu'] || '';
+        const name = row['Aciklama'] || row['UrunAdi'] || row['Ürün Adı'];
+        const location = row['Reyon'] || row['Raf'] || '';
+        const material = row['Hammadde'] || row['Materyal'] || '';
         const category = row['Kategori'] || CATEGORIES[0];
         const unit = row['Birim'] || UNITS[0];
         const minStock = row['KritikStok'] || 10;
         const startStock = row['BaslangicStogu'] || 0;
 
         if (!name) {
-            errors.push(`Satır ${index + 2}: Ürün adı eksik.`);
+            errors.push(`Satır ${index + 2}: Açıklama/Ürün adı eksik.`);
             return;
         }
 
-        // Check duplicates
-        if (products.some(p => p.product_name.toLowerCase() === name.trim().toLowerCase())) {
-             errors.push(`Satır ${index + 2}: "${name}" zaten sistemde kayıtlı.`);
+        // Check duplicates by Part Code or Name
+        if (partCode && products.some(p => p.part_code === partCode.toString().trim())) {
+             errors.push(`Satır ${index + 2}: "${partCode}" kodlu parça zaten var.`);
+             return;
+        }
+        if (products.some(p => p.product_name.toLowerCase() === name.toString().trim().toLowerCase())) {
+             errors.push(`Satır ${index + 2}: "${name}" isimli parça zaten var.`);
              return;
         }
 
         validProducts.push({
             product_name: name,
+            part_code: partCode ? partCode.toString().trim() : '',
+            location: location ? location.toString().trim() : '',
+            material: material ? material.toString().trim() : '',
+            barcode: partCode ? partCode.toString().trim() : '', // Auto barcode from part code
             category: category,
             unit: unit,
             min_stock_level: Number(minStock),
@@ -195,7 +216,7 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
     if (errors.length > 0) {
         alert(`Hatalar bulundu:\n${errors.slice(0, 5).join('\n')}\n...`);
         if (validProducts.length === 0) return;
-        if(!confirm(`Yine de ${validProducts.length} yeni ürünü kaydetmek ister misiniz?`)) return;
+        if(!confirm(`Yine de ${validProducts.length} yeni parçayı kaydetmek ister misiniz?`)) return;
     }
 
     onProcessProducts(validProducts);
@@ -220,14 +241,14 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
                 className={`flex-1 py-4 text-sm font-bold flex items-center justify-center gap-2 transition-colors ${mode === 'PRODUCT' ? 'text-green-600 border-b-2 border-green-600 bg-green-50 dark:bg-green-900/20 dark:text-green-400 dark:border-green-400' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
             >
                 <PackagePlus size={18} />
-                Yeni Ürün Yükle
+                Yeni Liste Yükle
             </button>
         </div>
 
         <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
           <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <FileSpreadsheet size={20} className={mode === 'TRANSACTION' ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"} />
-            {mode === 'TRANSACTION' ? 'Excel ile Giriş/Çıkış' : 'Excel ile Ürün Listesi'}
+            {mode === 'TRANSACTION' ? 'Excel ile Giriş/Çıkış' : 'Excel ile Parça Listesi'}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <X size={24} />
@@ -240,7 +261,7 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
           <div className={`${mode === 'TRANSACTION' ? 'bg-blue-50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-900/40' : 'bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-900/40'} p-4 rounded-xl border`}>
             <h3 className={`text-sm font-bold ${mode === 'TRANSACTION' ? 'text-blue-800 dark:text-blue-300' : 'text-green-800 dark:text-green-300'} mb-1`}>Adım 1: Şablonu İndirin</h3>
             <p className={`text-xs ${mode === 'TRANSACTION' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'} mb-3`}>
-                {mode === 'TRANSACTION' ? 'Giriş ve Çıkış işlemleri için bu formatı kullanın.' : 'Yeni ürünleri topluca eklemek için bu formatı kullanın.'}
+                {mode === 'TRANSACTION' ? 'Giriş ve Çıkış işlemleri için bu formatı kullanın.' : 'Yeni parça listesini (Reyon, Hammadde vb.) topluca eklemek için bu formatı kullanın.'}
             </p>
             <button 
                 onClick={handleDownloadTemplate}
@@ -293,7 +314,7 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
               disabled={parsedData.length === 0}
               className={`w-full py-3 rounded-xl text-white font-bold shadow-lg dark:shadow-none transition-all active:scale-95 disabled:bg-slate-300 disabled:cursor-not-allowed disabled:dark:bg-slate-700 ${mode === 'TRANSACTION' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200' : 'bg-green-600 hover:bg-green-700 shadow-green-200'}`}
             >
-              {mode === 'TRANSACTION' ? 'Hareketleri İşle' : 'Ürünleri Kaydet'}
+              {mode === 'TRANSACTION' ? 'Hareketleri İşle' : 'Parçaları Kaydet'}
             </button>
           </div>
       </div>

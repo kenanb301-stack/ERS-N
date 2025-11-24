@@ -1,49 +1,48 @@
+
 import { Product, Transaction, TransactionType } from './types';
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'p-1',
-    product_name: 'A4 Fotokopi Kağıdı',
-    category: 'Kırtasiye',
-    min_stock_level: 50,
-    unit: 'Paket',
-    current_stock: 120,
-    barcode: '869000000001',
-    image_url: 'https://images.unsplash.com/photo-1583577317378-d56730592911?auto=format&fit=crop&q=80&w=200',
+    product_name: 'BASKI LAMASI',
+    part_code: 'P-00003',
+    location: 'B1-06-06',
+    material: 'ST37 SOĞUK ÇEKME',
+    category: 'Yedek Parça',
+    min_stock_level: 5,
+    unit: 'Adet',
+    current_stock: 3, // Kritik seviye altı (Örnekteki miktar)
+    barcode: 'P-00003',
+    image_url: 'https://images.unsplash.com/photo-1535295972055-1c762f4483e5?auto=format&fit=crop&q=80&w=200',
     created_at: '2023-10-01',
   },
   {
     id: 'p-2',
-    product_name: 'Endüstriyel Temizlik Sıvısı',
-    category: 'Temizlik',
-    min_stock_level: 20,
-    unit: 'Bidon (5L)',
-    current_stock: 15, // Critical
-    barcode: '869000000002',
-    image_url: 'https://images.unsplash.com/photo-1585670149967-b4f4da2ea866?auto=format&fit=crop&q=80&w=200',
+    product_name: 'HİDROLİK PİSTON MİLİ',
+    part_code: 'H-20402',
+    location: 'A2-12-01',
+    material: 'CK45 KROM KAPLI',
+    category: 'Hidrolik',
+    min_stock_level: 2,
+    unit: 'Adet',
+    current_stock: 8,
+    barcode: 'H-20402',
+    image_url: 'https://images.unsplash.com/photo-1517260739337-6799d239ce83?auto=format&fit=crop&q=80&w=200',
     created_at: '2023-10-05',
   },
   {
     id: 'p-3',
-    product_name: 'Laptop Standı',
-    category: 'Ofis Malzemeleri',
-    min_stock_level: 10,
-    unit: 'Adet',
-    current_stock: 45,
-    barcode: '869000000003',
-    image_url: 'https://images.unsplash.com/photo-1625766763788-95dcce9bf5ac?auto=format&fit=crop&q=80&w=200',
-    created_at: '2023-11-12',
-  },
-  {
-    id: 'p-4',
-    product_name: 'USB-C Kablo',
-    category: 'Elektronik',
+    product_name: 'CIVATA M12x40',
+    part_code: 'C-1240-88',
+    location: 'K4-01-05',
+    material: '8.8 ÇELİK',
+    category: 'Hırdavat',
     min_stock_level: 100,
     unit: 'Adet',
-    current_stock: 80, // Critical
-    barcode: '869000000004',
-    image_url: 'https://images.unsplash.com/photo-1622737133809-d95047b9e673?auto=format&fit=crop&q=80&w=200',
-    created_at: '2023-11-15',
+    current_stock: 450,
+    barcode: 'C-1240-88',
+    image_url: 'https://images.unsplash.com/photo-1585314062340-f1a5a7c9328d?auto=format&fit=crop&q=80&w=200',
+    created_at: '2023-11-12',
   },
 ];
 
@@ -51,28 +50,28 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
   {
     id: 't-1',
     product_id: 'p-1',
-    product_name: 'A4 Fotokopi Kağıdı',
+    product_name: 'BASKI LAMASI',
     type: TransactionType.IN,
-    quantity: 100,
+    quantity: 10,
     date: '2023-12-01T09:00:00.000Z',
-    description: 'Toptancıdan gelen mal',
-    created_by: 'Ahmet Yılmaz',
-    previous_stock: 20,
-    new_stock: 120
+    description: 'İmalattan giriş',
+    created_by: 'Ahmet Usta',
+    previous_stock: 0,
+    new_stock: 10
   },
   {
     id: 't-2',
-    product_id: 'p-2',
-    product_name: 'Endüstriyel Temizlik Sıvısı',
+    product_id: 'p-1',
+    product_name: 'BASKI LAMASI',
     type: TransactionType.OUT,
-    quantity: 5,
+    quantity: 7,
     date: '2023-12-02T14:30:00.000Z',
-    description: 'Kat 3 temizliği için',
-    created_by: 'Ayşe Demir',
-    previous_stock: 20,
-    new_stock: 15
+    description: 'Montaj hattına sevk',
+    created_by: 'Mehmet Şef',
+    previous_stock: 10,
+    new_stock: 3
   },
 ];
 
-export const UNITS = ['Adet', 'Paket', 'Koli', 'Kg', 'Litre', 'Metre', 'Rulo'];
-export const CATEGORIES = ['Genel', 'Kırtasiye', 'Elektronik', 'Temizlik', 'Hırdavat', 'Mobilya'];
+export const UNITS = ['Adet', 'Metre', 'Kg', 'Litre', 'Takım', 'Paket'];
+export const CATEGORIES = ['Yedek Parça', 'Hırdavat', 'Hammadde', 'Hidrolik', 'Elektrik', 'Sarf Malzeme'];
