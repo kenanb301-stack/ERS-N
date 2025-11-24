@@ -13,63 +13,54 @@ interface BarcodePrinterModalProps {
 const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClose, products }) => {
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [barcodeImages, setBarcodeImages] = useState<Record<string, string>>({});
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Products that have a barcode value
   const validProducts = products.filter(p => (p.barcode && p.barcode.trim().length > 0) || (p.part_code && p.part_code.trim().length > 0));
 
   useEffect(() => {
     if (isOpen) {
-      // Varsayılan olarak hiçbir şeyi seçme (Kullanıcı kendi seçsin)
+      // Reset selection when opening
       setSelectedProductIds(new Set());
-      setBarcodeImages({});
+      
+      // Generate barcodes for ALL valid products immediately using an in-memory canvas
+      // This ensures images are ready for both preview and printing
+      setIsGenerating(true);
+      
+      // Use setTimeout to allow UI to render modal first
+      const timer = setTimeout(() => {
+          const newImages: Record<string, string> = {};
+          const canvas = document.createElement('canvas'); // Off-screen canvas
+          
+          validProducts.forEach(product => {
+              try {
+                  const codeToUse = product.barcode || product.part_code;
+                  if (codeToUse) {
+                      JsBarcode(canvas, codeToUse, {
+                          format: "CODE128",
+                          lineColor: "#000",
+                          width: 2,
+                          height: 50,
+                          displayValue: true,
+                          fontSize: 14,
+                          textMargin: 2,
+                          margin: 0,
+                          background: "#ffffff" // Ensure white background for transparency safety
+                      });
+                      newImages[product.id] = canvas.toDataURL("image/png");
+                  }
+              } catch (e) {
+                  console.error(`Barcode generation failed for ${product.product_name}`, e);
+              }
+          });
+          
+          setBarcodeImages(newImages);
+          setIsGenerating(false);
+      }, 100);
+
+      return () => clearTimeout(timer);
     }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (isOpen && selectedProductIds.size > 0) {
-        // Wait for DOM render
-        const timer = setTimeout(() => {
-            const newImages: Record<string, string> = {};
-            
-            selectedProductIds.forEach(id => {
-                const product = validProducts.find(p => p.id === id);
-                if (product) {
-                    try {
-                        const codeToUse = product.barcode || product.part_code;
-                        const canvasId = `barcode-canvas-${id}`;
-                        const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
-                        
-                        if (canvas && codeToUse) {
-                            // 1. Barkodu Canvas üzerine çiz
-                            JsBarcode(canvas, codeToUse, {
-                                format: "CODE128",
-                                lineColor: "#000",
-                                width: 2,
-                                height: 50,
-                                displayValue: true,
-                                fontSize: 14,
-                                textMargin: 2,
-                                margin: 0
-                            });
-
-                            // 2. Çizilen barkodu resim verisine (Base64) dönüştür ve sakla
-                            // Bu işlem yazdırma sırasında kaybolmasını önler
-                            newImages[id] = canvas.toDataURL("image/png");
-                        }
-                    } catch (e) {
-                        console.error("Barcode generation error", e);
-                    }
-                }
-            });
-
-            // State'i güncelle
-            setBarcodeImages(prev => ({ ...prev, ...newImages }));
-
-        }, 100);
-
-        return () => clearTimeout(timer);
-    }
-  }, [isOpen, selectedProductIds, validProducts]);
+  }, [isOpen, products]); // Re-run if products change or modal opens
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedProductIds);
@@ -126,7 +117,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 page-break-after: always;
                 page-break-inside: avoid;
                 position: relative;
-                padding: 2mm;
+                padding: 2mm 3mm;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
@@ -135,12 +126,13 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 overflow: hidden;
                 border: none;
                 align-items: center;
-                justify-content: center;
+                justify-content: flex-start;
             }
-            /* Yazdırırken arkaplan grafikleri zorla */
-            * {
+            /* Resimlerin net çıkması için */
+            img {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+                image-rendering: pixelated;
             }
         }
         /* Ekran Önizleme Stilleri */
@@ -150,13 +142,13 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
             background: white;
             border: 1px solid #ddd;
             border-radius: 4px;
-            padding: 2mm;
+            padding: 2mm 3mm;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
             overflow: hidden;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
         }
       `}</style>
 
@@ -178,7 +170,8 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
             <div className="flex items-center gap-4">
                 <button 
                     onClick={toggleAll}
-                    className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400"
+                    disabled={isGenerating}
+                    className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50"
                 >
                     {selectedProductIds.size === validProducts.length ? <CheckSquare size={18} /> : <Square size={18} />}
                     Tümünü Seç / Kaldır
@@ -195,11 +188,11 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 </div>
                 <button 
                     onClick={handlePrint}
-                    disabled={selectedProductIds.size === 0}
+                    disabled={selectedProductIds.size === 0 || isGenerating}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Printer size={18} />
-                    YAZDIR
+                    {isGenerating ? 'Hazırlanıyor...' : 'YAZDIR'}
                 </button>
             </div>
         </div>
@@ -207,49 +200,58 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         {/* Preview Area (Scrollable) */}
         <div className="flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900 screen-preview">
             
-            {/* Önizleme Grid'i (Sadece Ekranda Görünür) */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center">
-                {validProducts.map(product => {
-                    const isSelected = selectedProductIds.has(product.id);
-                    // Seçili değilse biraz silik göster, ama yine de göster ki tıklanabilsin
-                    const opacityClass = isSelected ? 'opacity-100 ring-2 ring-blue-500' : 'opacity-50 hover:opacity-80';
+            {isGenerating ? (
+                <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-slate-500">Barkodlar oluşturuluyor...</p>
+                    </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center">
+                    {validProducts.map(product => {
+                        const isSelected = selectedProductIds.has(product.id);
+                        const opacityClass = isSelected ? 'opacity-100 ring-2 ring-blue-500' : 'opacity-50 hover:opacity-80';
+                        const imgSrc = barcodeImages[product.id];
 
-                    return (
-                        <div 
-                            key={product.id} 
-                            className={`relative group cursor-pointer transition-all duration-200 ${opacityClass}`} 
-                            onClick={() => toggleSelection(product.id)}
-                        >
-                            {/* EKRAN İÇİN TASARIM - BARKOD ODAKLI */}
-                            <div className="label-container bg-white shadow-sm">
-                                {/* Üst Bilgi */}
-                                <div className="w-full flex justify-between items-center mb-1">
-                                    <div className="text-[10px] font-bold text-slate-600 uppercase truncate max-w-[60%]">
-                                        {product.product_name}
+                        return (
+                            <div 
+                                key={product.id} 
+                                className={`relative group cursor-pointer transition-all duration-200 ${opacityClass}`} 
+                                onClick={() => toggleSelection(product.id)}
+                            >
+                                {/* EKRAN ÖNİZLEME */}
+                                <div className="label-container bg-white shadow-sm">
+                                    <div className="w-full flex justify-between items-center mb-2">
+                                        <div className="text-[14px] font-black font-mono text-slate-800 tracking-tighter">
+                                            {product.part_code || 'KODSUZ'}
+                                        </div>
+                                        <div className="text-[12px] font-bold border-2 border-black px-1.5 py-0.5 rounded text-black">
+                                            {product.location || '-'}
+                                        </div>
                                     </div>
-                                    <div className="text-[10px] font-bold border border-black px-1 rounded">
-                                        {product.location || 'RAF YOK'}
+                                    
+                                    <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
+                                        {imgSrc ? (
+                                            <img src={imgSrc} alt="barcode" className="max-w-full h-auto" />
+                                        ) : (
+                                            <span className="text-[8px] text-red-500">Hata</span>
+                                        )}
                                     </div>
                                 </div>
-                                
-                                {/* Barkod (Canvas) */}
-                                <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
-                                    <canvas id={`barcode-canvas-${product.id}`} className="max-w-full h-auto"></canvas>
-                                </div>
+
+                                {isSelected && (
+                                    <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-md">
+                                        <CheckSquare size={16} />
+                                    </div>
+                                )}
                             </div>
+                        );
+                    })}
+                </div>
+            )}
 
-                            {/* Seçim İndikatörü */}
-                            {isSelected && (
-                                <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-md">
-                                    <CheckSquare size={16} />
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
-
-            {validProducts.length === 0 && (
+            {!isGenerating && validProducts.length === 0 && (
                 <div className="text-center py-20 text-slate-400 dark:text-slate-500">
                     <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
                     <p>Barkod basılabilecek ürün bulunamadı.</p>
@@ -262,21 +264,17 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
       <div id="print-area">
         {validProducts.filter(p => selectedProductIds.has(p.id)).map(product => (
             <div key={`print-${product.id}`} className="label-container">
-                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', marginBottom: '2mm' }}>
-                    <span style={{ fontSize: '9pt', fontWeight: 'bold', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', maxWidth: '35mm' }}>
-                        {product.product_name.substring(0, 18)}
+                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2mm' }}>
+                    <span style={{ fontSize: '13pt', fontWeight: '900', fontFamily: 'monospace', letterSpacing: '-0.5px' }}>
+                        {product.part_code || ''}
                     </span>
-                    <span style={{ fontSize: '9pt', fontWeight: 'bold', border: '1px solid black', padding: '0 2px' }}>
-                        {product.location}
+                    <span style={{ fontSize: '11pt', fontWeight: 'bold', border: '2px solid black', padding: '1px 4px', borderRadius: '4px' }}>
+                        {product.location || ''}
                     </span>
                 </div>
                 
-                {/* 
-                    ÖNEMLİ DÜZELTME:
-                    Doğrudan Canvas ID'si yerine State'e kaydedilen Data URL kullanılıyor.
-                    Yazdırma penceresi açıldığında Canvas render edilmese bile resim verisi hazırdır.
-                */}
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+                {/* DOĞRUDAN IMG KULLANIMI (Canvas değil) */}
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', flex: 1 }}>
                     {barcodeImages[product.id] ? (
                          <img 
                             src={barcodeImages[product.id]}
