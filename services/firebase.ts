@@ -1,4 +1,3 @@
-
 import { initializeApp, getApps, deleteApp, FirebaseApp } from 'firebase/app';
 import { getDatabase, Database } from 'firebase/database';
 
@@ -20,7 +19,7 @@ export const initializeFirebase = (config: FirebaseConfig): Database => {
   try {
     // Eğer hali hazırda bir app varsa ve config değiştiyse sil
     if (getApps().length > 0) {
-       getApps().forEach(a => deleteApp(a));
+       getApps().forEach((a: FirebaseApp) => deleteApp(a));
     }
 
     app = initializeApp(config);

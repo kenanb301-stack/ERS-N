@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud } from 'lucide-react';
-import { ref, onValue, set } from 'firebase/database';
+import { ref, onValue, set, DataSnapshot } from 'firebase/database';
 import type { Database } from 'firebase/database';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
@@ -108,7 +108,7 @@ function App() {
     if (!firebaseDb) return;
 
     const dataRef = ref(firebaseDb, 'data');
-    const unsubscribe = onValue(dataRef, (snapshot) => {
+    const unsubscribe = onValue(dataRef, (snapshot: DataSnapshot) => {
         const data = snapshot.val();
         if (data) {
             // Cloud'dan veri geldiğinde yerel state'i güncelle
@@ -156,7 +156,7 @@ function App() {
           transactions: trans,
           lastUpdated: new Date().toISOString(),
           updatedBy: currentUser?.name || 'Unknown'
-      }).catch(err => console.error("Cloud sync failed:", err));
+      }).catch((err: Error) => console.error("Cloud sync failed:", err));
   };
 
   // --- CLOUD SETTINGS HANDLERS ---
