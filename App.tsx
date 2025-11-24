@@ -1,6 +1,7 @@
-
-import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud } from 'lucide-react';
+import { ref, onValue, set } from 'firebase/database';
+import type { Database } from 'firebase/database';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -13,8 +14,11 @@ import BarcodePrinterModal from './components/BarcodePrinterModal';
 import BarcodeScanner from './components/BarcodeScanner';
 import Analytics from './components/Analytics';
 import Login from './components/Login';
+import DataBackupModal from './components/DataBackupModal';
+import CloudSyncModal from './components/CloudSyncModal';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState, User } from './types';
+import { initializeFirebase, FirebaseConfig } from './services/firebase';
 
 // Utility to generate simple ID
 const generateId = () => Math.random().toString(36).substring(2, 11);
@@ -47,6 +51,14 @@ function App() {
     }
   });
 
+  // FIREBASE / CLOUD STATE
+  const [firebaseDb, setFirebaseDb] = useState<Database | null>(null);
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
+  const [cloudConfig, setCloudConfig] = useState<FirebaseConfig | null>(() => {
+      const saved = localStorage.getItem('depopro_firebase_config');
+      return saved ? JSON.parse(saved) : null;
+  });
+
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   
   // Modal States
@@ -63,6 +75,7 @@ function App() {
 
   const [isOrderSimModalOpen, setIsOrderSimModalOpen] = useState(false);
   const [isBarcodePrinterOpen, setIsBarcodePrinterOpen] = useState(false);
+  const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
 
   // Global Scanner State
   const [isGlobalScannerOpen, setIsGlobalScannerOpen] = useState(false);
@@ -76,14 +89,94 @@ function App() {
     return saved ? JSON.parse(saved) : true;
   });
 
-  // Persistence Effects
-  useEffect(() => {
-    localStorage.setItem('depopro_products', JSON.stringify(products));
-  }, [products]);
+  // --- PERSISTENCE & SYNC LOGIC ---
 
+  // 1. Initialize Firebase if config exists
   useEffect(() => {
-    localStorage.setItem('depopro_transactions', JSON.stringify(transactions));
-  }, [transactions]);
+    if (cloudConfig && cloudConfig.databaseURL) {
+        try {
+            const db = initializeFirebase(cloudConfig);
+            setFirebaseDb(db);
+        } catch (e) {
+            console.error("Firebase init failed:", e);
+        }
+    }
+  }, [cloudConfig]);
+
+  // 2. Listen to Firebase Updates (READ)
+  useEffect(() => {
+    if (!firebaseDb) return;
+
+    const dataRef = ref(firebaseDb, 'data');
+    const unsubscribe = onValue(dataRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            // Cloud'dan veri geldiğinde yerel state'i güncelle
+            if (data.products) {
+                setProducts(data.products);
+                localStorage.setItem('depopro_products', JSON.stringify(data.products));
+            }
+            if (data.transactions) {
+                setTransactions(data.transactions);
+                localStorage.setItem('depopro_transactions', JSON.stringify(data.transactions));
+            }
+        } else {
+            // Cloud boşsa ve yerelde veri varsa, ilk kez yüklüyoruzdur.
+            // Bu durumda yerel veriyi buluta gönderelim (İlk Senkronizasyon)
+            if (products.length > 0) {
+                syncDataToCloud(products, transactions);
+            }
+        }
+    });
+
+    return () => unsubscribe();
+  }, [firebaseDb]); // Sadece DB bağlantısı değiştiğinde listener'ı yenile
+
+  // 3. Centralized Save Function (WRITE)
+  const saveData = (newProducts: Product[], newTransactions: Transaction[]) => {
+      // 1. Update React State (Instant UI update)
+      setProducts(newProducts);
+      setTransactions(newTransactions);
+
+      // 2. Update LocalStorage (Backup)
+      localStorage.setItem('depopro_products', JSON.stringify(newProducts));
+      localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
+
+      // 3. Update Firebase (Sync)
+      if (firebaseDb) {
+          syncDataToCloud(newProducts, newTransactions);
+      }
+  };
+
+  const syncDataToCloud = (prods: Product[], trans: Transaction[]) => {
+      if (!firebaseDb) return;
+      // Tüm veriyi 'data' düğümünün altına yazıyoruz
+      set(ref(firebaseDb, 'data'), {
+          products: prods,
+          transactions: trans,
+          lastUpdated: new Date().toISOString(),
+          updatedBy: currentUser?.name || 'Unknown'
+      }).catch(err => console.error("Cloud sync failed:", err));
+  };
+
+  // --- CLOUD SETTINGS HANDLERS ---
+  const handleSaveCloudConfig = (config: FirebaseConfig) => {
+      setCloudConfig(config);
+      localStorage.setItem('depopro_firebase_config', JSON.stringify(config));
+      setIsCloudModalOpen(false);
+      alert("Ayarlar kaydedildi. Bağlantı kuruluyor...");
+      window.location.reload(); // Temiz başlangıç için yenile
+  };
+
+  const handleDisconnectCloud = () => {
+      setCloudConfig(null);
+      setFirebaseDb(null);
+      localStorage.removeItem('depopro_firebase_config');
+      setIsCloudModalOpen(false);
+      window.location.reload();
+  };
+
+  // --- APP EFFECTS ---
 
   useEffect(() => {
     if (isDarkMode) {
@@ -117,12 +210,57 @@ function App() {
   // Check for negative stock
   const hasNegativeStock = products.some(p => p.current_stock < 0);
 
+  // --- DATA SYNC LOGIC (FILE BACKUP) ---
+  const handleBackupData = () => {
+    const data = {
+        products,
+        transactions,
+        exportedAt: new Date().toISOString(),
+        version: '1.0'
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `depopro_yedek_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestoreData = async (file: File) => {
+      return new Promise<void>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+              try {
+                  const json = JSON.parse(e.target?.result as string);
+                  if (json.products && Array.isArray(json.products) && json.transactions && Array.isArray(json.transactions)) {
+                      saveData(json.products, json.transactions); // Use centralized save
+                      resolve();
+                  } else {
+                      reject(new Error("Geçersiz yedek dosyası formatı"));
+                  }
+              } catch (err) {
+                  reject(err);
+              }
+          };
+          reader.onerror = () => reject(new Error("Dosya okunamadı"));
+          reader.readAsText(file);
+      });
+  };
+  // ----------------------
+
   // 1. Transaction Logic (Create or Edit)
   const handleTransactionSubmit = (data: { id?: string; productId: string; quantity: number; description: string; type: TransactionType }) => {
     if (currentUser?.role !== 'ADMIN') return; // Security check
 
     const newProductTarget = products.find(p => p.id === data.productId);
     if (!newProductTarget) return;
+
+    let updatedProducts = [...products];
+    let updatedTransactions = [...transactions];
 
     if (data.id) {
         // EDIT EXISTING TRANSACTION
@@ -132,51 +270,46 @@ function App() {
         const oldProductId = oldTransaction.product_id;
         const newProductId = data.productId;
 
-        setProducts(prevProducts => {
-            return prevProducts.map(p => {
-                let stock = p.current_stock;
-                
-                // Revert & Apply Logic
-                if (p.id === oldProductId) {
-                    stock = oldTransaction.type === TransactionType.IN 
-                        ? stock - oldTransaction.quantity 
-                        : stock + oldTransaction.quantity;
-                }
-                
-                if (p.id === newProductId) {
-                     stock = data.type === TransactionType.IN 
-                        ? stock + data.quantity 
-                        : stock - data.quantity;
-                }
+        updatedProducts = updatedProducts.map(p => {
+            let stock = p.current_stock;
+            
+            // Revert & Apply Logic
+            if (p.id === oldProductId) {
+                stock = oldTransaction.type === TransactionType.IN 
+                    ? stock - oldTransaction.quantity 
+                    : stock + oldTransaction.quantity;
+            }
+            
+            if (p.id === newProductId) {
+                 stock = data.type === TransactionType.IN 
+                    ? stock + data.quantity 
+                    : stock - data.quantity;
+            }
 
-                // CRITICAL STOCK DATE LOGIC
-                let criticalSince = p.critical_since;
-                let lastAlert = p.last_alert_sent_at;
-                
-                // Eğer ürün şu an kritik seviyedeyse
-                if (stock <= p.min_stock_level) {
-                    // Ve daha önce kritik değilseydi (veya tarih yoksa)
-                    if (!criticalSince) {
-                        criticalSince = new Date().toISOString();
-                        lastAlert = undefined; // Yeni kritik oldu, henüz mail atılmadı
-                    }
-                } else {
-                    // Kritik seviyeden çıktıysa tarihleri sıfırla
-                    criticalSince = undefined;
+            // CRITICAL STOCK DATE LOGIC
+            let criticalSince = p.critical_since;
+            let lastAlert = p.last_alert_sent_at;
+            
+            if (stock <= p.min_stock_level) {
+                if (!criticalSince) {
+                    criticalSince = new Date().toISOString();
                     lastAlert = undefined;
                 }
+            } else {
+                criticalSince = undefined;
+                lastAlert = undefined;
+            }
 
-                return { 
-                    ...p, 
-                    current_stock: stock,
-                    critical_since: criticalSince,
-                    last_alert_sent_at: lastAlert
-                };
-            });
+            return { 
+                ...p, 
+                current_stock: stock,
+                critical_since: criticalSince,
+                last_alert_sent_at: lastAlert
+            };
         });
 
         // Update Transaction Record
-        setTransactions(prevTransactions => prevTransactions.map(t => {
+        updatedTransactions = updatedTransactions.map(t => {
             if (t.id === data.id) {
                 let prevStockSnapshot = t.previous_stock;
                 if (oldProductId !== newProductId) prevStockSnapshot = newProductTarget.current_stock;
@@ -196,7 +329,7 @@ function App() {
                 };
             }
             return t;
-        }));
+        });
 
     } else {
         // CREATE NEW TRANSACTION
@@ -204,20 +337,17 @@ function App() {
         const change = data.type === TransactionType.IN ? data.quantity : -data.quantity;
         const newStockVal = currentStock + change;
 
-        // Critical Stock Logic for New Transaction
-        setProducts(prevProducts => prevProducts.map(p => {
+        updatedProducts = updatedProducts.map(p => {
             if (p.id === data.productId) {
                 let criticalSince = p.critical_since;
                 let lastAlert = p.last_alert_sent_at;
 
                 if (newStockVal <= p.min_stock_level) {
-                    // Önceden kritik değilse veya tarih yoksa set et
                     if (!criticalSince || p.current_stock > p.min_stock_level) {
                         criticalSince = new Date().toISOString();
                         lastAlert = undefined;
                     }
                 } else {
-                    // Kritik değilse temizle
                     criticalSince = undefined;
                     lastAlert = undefined;
                 }
@@ -230,7 +360,7 @@ function App() {
                 };
             }
             return p;
-        }));
+        });
 
         const newTransaction: Transaction = {
             id: `t-${generateId()}`,
@@ -245,8 +375,11 @@ function App() {
             new_stock: newStockVal
         };
 
-        setTransactions(prevTransactions => [newTransaction, ...prevTransactions]);
+        updatedTransactions = [newTransaction, ...updatedTransactions];
     }
+
+    // Save ALL
+    saveData(updatedProducts, updatedTransactions);
 
     setIsModalOpen(false);
     setEditingTransaction(null);
@@ -258,44 +391,44 @@ function App() {
       const transactionToDelete = transactions.find(t => t.id === id);
 
       if (transactionToDelete) {
-          setProducts(prevProducts => {
-              return prevProducts.map(product => {
-                  if (product.id === transactionToDelete.product_id) {
-                      let newStock = product.current_stock;
-                      const qty = Number(transactionToDelete.quantity);
+          const updatedProducts = products.map(product => {
+              if (product.id === transactionToDelete.product_id) {
+                  let newStock = product.current_stock;
+                  const qty = Number(transactionToDelete.quantity);
 
-                      if (isNaN(qty)) return product;
+                  if (isNaN(qty)) return product;
 
-                      if (transactionToDelete.type === TransactionType.IN) {
-                          newStock -= qty;
-                      } else {
-                          newStock += qty;
-                      }
-                      
-                      // Critical Logic Check after delete (revert)
-                      let criticalSince = product.critical_since;
-                      let lastAlert = product.last_alert_sent_at;
-                      
-                      if (newStock <= product.min_stock_level) {
-                           if (!criticalSince) criticalSince = new Date().toISOString();
-                      } else {
-                           criticalSince = undefined;
-                           lastAlert = undefined;
-                      }
-
-                      return { 
-                          ...product, 
-                          current_stock: newStock,
-                          critical_since: criticalSince,
-                          last_alert_sent_at: lastAlert
-                      };
+                  if (transactionToDelete.type === TransactionType.IN) {
+                      newStock -= qty;
+                  } else {
+                      newStock += qty;
                   }
-                  return product;
-              });
-          });
-      }
+                  
+                  let criticalSince = product.critical_since;
+                  let lastAlert = product.last_alert_sent_at;
+                  
+                  if (newStock <= product.min_stock_level) {
+                       if (!criticalSince) criticalSince = new Date().toISOString();
+                  } else {
+                       criticalSince = undefined;
+                       lastAlert = undefined;
+                  }
 
-      setTransactions(prevTransactions => prevTransactions.filter(t => t.id !== id));
+                  return { 
+                      ...product, 
+                      current_stock: newStock,
+                      critical_since: criticalSince,
+                      last_alert_sent_at: lastAlert
+                  };
+              }
+              return product;
+          });
+          
+          const updatedTransactions = transactions.filter(t => t.id !== id);
+          
+          // Save ALL
+          saveData(updatedProducts, updatedTransactions);
+      }
       
       if (onSuccess) {
           onSuccess();
@@ -312,14 +445,16 @@ function App() {
   // 2. Product Create & Edit Logic
   const handleSaveProduct = (data: any) => {
     if (currentUser?.role !== 'ADMIN') return;
+    
+    let updatedProducts = [...products];
 
     if (editingProduct) {
         // Edit Existing
         const { current_stock, ...updateData } = data;
         
-        setProducts(prevProducts => prevProducts.map(p => 
+        updatedProducts = updatedProducts.map(p => 
             p.id === editingProduct.id ? { ...p, ...updateData } : p
-        ));
+        );
     } else {
         // Create New
         const newProduct: Product = {
@@ -328,8 +463,11 @@ function App() {
             created_at: new Date().toISOString(),
             critical_since: data.current_stock <= data.min_stock_level ? new Date().toISOString() : undefined
         };
-        setProducts(prev => [...prev, newProduct]);
+        updatedProducts = [...updatedProducts, newProduct];
     }
+    
+    // Save ALL (Transactions don't change, but need to pass them)
+    saveData(updatedProducts, transactions);
     
     setIsProductModalOpen(false);
     setEditingProduct(null);
@@ -350,62 +488,60 @@ function App() {
     if (currentUser?.role !== 'ADMIN') return;
 
     const newTxIds: Transaction[] = [];
-    
-    setProducts(prevProducts => {
-        let updatedProducts = [...prevProducts];
+    let updatedProducts = [...products];
 
-        newTransactionsData.forEach(item => {
-            const txId = `t-${generateId()}`;
-            const product = updatedProducts.find(p => p.id === item.productId);
-            if(!product) return;
+    newTransactionsData.forEach(item => {
+        const txId = `t-${generateId()}`;
+        const product = updatedProducts.find(p => p.id === item.productId);
+        if(!product) return;
 
-            const previousStock = product.current_stock;
-            const change = item.type === TransactionType.IN ? item.quantity : -item.quantity;
-            const newStock = previousStock + change;
+        const previousStock = product.current_stock;
+        const change = item.type === TransactionType.IN ? item.quantity : -item.quantity;
+        const newStock = previousStock + change;
 
-            newTxIds.push({
-                id: txId,
-                product_id: item.productId,
-                product_name: product.product_name,
-                type: item.type,
-                quantity: item.quantity,
-                date: new Date().toISOString(),
-                description: item.description || 'Toplu Excel İşlemi',
-                created_by: `${currentUser.name} (Excel)`,
-                previous_stock: previousStock,
-                new_stock: newStock
-            });
+        newTxIds.push({
+            id: txId,
+            product_id: item.productId,
+            product_name: product.product_name,
+            type: item.type,
+            quantity: item.quantity,
+            date: new Date().toISOString(),
+            description: item.description || 'Toplu Excel İşlemi',
+            created_by: `${currentUser.name} (Excel)`,
+            previous_stock: previousStock,
+            new_stock: newStock
+        });
 
-            // Update product in temp array
-            updatedProducts = updatedProducts.map(p => {
-                if(p.id === item.productId) {
-                    let criticalSince = p.critical_since;
-                    let lastAlert = p.last_alert_sent_at;
+        // Update product in temp array
+        updatedProducts = updatedProducts.map(p => {
+            if(p.id === item.productId) {
+                let criticalSince = p.critical_since;
+                let lastAlert = p.last_alert_sent_at;
 
-                    if (newStock <= p.min_stock_level) {
-                        if (!criticalSince || p.current_stock > p.min_stock_level) {
-                            criticalSince = new Date().toISOString();
-                            lastAlert = undefined;
-                        }
-                    } else {
-                        criticalSince = undefined;
+                if (newStock <= p.min_stock_level) {
+                    if (!criticalSince || p.current_stock > p.min_stock_level) {
+                        criticalSince = new Date().toISOString();
                         lastAlert = undefined;
                     }
-
-                    return { 
-                        ...p, 
-                        current_stock: newStock,
-                        critical_since: criticalSince,
-                        last_alert_sent_at: lastAlert
-                    };
+                } else {
+                    criticalSince = undefined;
+                    lastAlert = undefined;
                 }
-                return p;
-            });
+
+                return { 
+                    ...p, 
+                    current_stock: newStock,
+                    critical_since: criticalSince,
+                    last_alert_sent_at: lastAlert
+                };
+            }
+            return p;
         });
-        return updatedProducts;
     });
 
-    setTransactions(prev => [...newTxIds, ...prev]);
+    const updatedTransactions = [...newTxIds, ...transactions];
+    saveData(updatedProducts, updatedTransactions);
+
     setIsBulkModalOpen(false);
     alert(`${newTransactionsData.length} adet işlem başarıyla kaydedildi.`);
   };
@@ -420,27 +556,34 @@ function App() {
           critical_since: p.current_stock <= p.min_stock_level ? new Date().toISOString() : undefined
       }));
 
-      setProducts(prev => [...prev, ...newProducts]);
+      const updatedProducts = [...products, ...newProducts];
+      saveData(updatedProducts, transactions);
+
       setIsBulkModalOpen(false);
       alert(`${newProducts.length} adet yeni ürün başarıyla eklendi.`);
   };
 
   const handleDeleteProduct = (id: string, onSuccess?: () => void) => {
     if (currentUser?.role !== 'ADMIN') return;
-    setProducts(prev => prev.filter(p => p.id !== id));
-    setTransactions(prev => prev.filter(t => t.product_id !== id));
+    
+    const updatedProducts = products.filter(p => p.id !== id);
+    const updatedTransactions = transactions.filter(t => t.product_id !== id);
+    
+    saveData(updatedProducts, updatedTransactions);
+
     if (onSuccess) onSuccess();
   }
 
   // YENİ: Raporlanan ürünlerin işaretlenmesi
   const handleReportSent = (productIds: string[]) => {
       const now = new Date().toISOString();
-      setProducts(prev => prev.map(p => {
+      const updatedProducts = products.map(p => {
           if (productIds.includes(p.id)) {
               return { ...p, last_alert_sent_at: now };
           }
           return p;
-      }));
+      });
+      saveData(updatedProducts, transactions);
   };
 
   const openQuickAction = (type: TransactionType) => {
@@ -529,6 +672,26 @@ function App() {
             )}
         </nav>
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
+             {currentUser.role === 'ADMIN' && (
+                 <>
+                    <button 
+                        onClick={() => setIsCloudModalOpen(true)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all border ${firebaseDb ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400' : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 dark:bg-slate-700/50 dark:border-slate-600 dark:text-slate-300'}`}
+                    >
+                        <Cloud size={20} className={firebaseDb ? 'text-green-600' : 'text-blue-500'} />
+                        {firebaseDb ? 'Bulut Aktif' : 'Bulut Bağlantısı'}
+                    </button>
+
+                    <button 
+                        onClick={() => setIsDataBackupOpen(true)}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all bg-slate-50 hover:bg-slate-100 dark:bg-slate-700/50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+                    >
+                        <DatabaseIcon size={20} className="text-slate-500" />
+                        Veri Yedekleme
+                    </button>
+                 </>
+             )}
+
              <button 
                 onClick={toggleDarkMode}
                 className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors group"
@@ -563,7 +726,12 @@ function App() {
             <span className="dark:text-white text-slate-800">DepoPro</span>
         </h1>
         <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 mr-1">{currentUser.name}</span>
+            {currentUser.role === 'ADMIN' && (
+                <button onClick={() => setIsCloudModalOpen(true)} className={`p-2 rounded-lg ${firebaseDb ? 'text-green-600 bg-green-50 dark:bg-green-900/20' : 'text-blue-600 bg-blue-50 dark:bg-blue-900/20'}`}>
+                    <Cloud size={18} />
+                </button>
+            )}
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 mr-1 hidden sm:inline">{currentUser.name}</span>
             <button onClick={handleLogout} className="p-2 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg">
                 <LogOut size={18} />
             </button>
@@ -727,6 +895,22 @@ function App() {
                 onProcessProducts={handleBulkProductProcess}
                 products={products}
                 initialMode={bulkModalMode}
+            />
+
+            <DataBackupModal
+                isOpen={isDataBackupOpen}
+                onClose={() => setIsDataBackupOpen(false)}
+                onBackup={handleBackupData}
+                onRestore={handleRestoreData}
+            />
+
+            <CloudSyncModal 
+                isOpen={isCloudModalOpen}
+                onClose={() => setIsCloudModalOpen(false)}
+                onSave={handleSaveCloudConfig}
+                onDisconnect={handleDisconnectCloud}
+                currentConfig={cloudConfig}
+                isConnected={!!firebaseDb}
             />
         </>
       )}
