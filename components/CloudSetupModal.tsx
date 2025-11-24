@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, Cloud, Save, Link, CheckCircle, HelpCircle, ExternalLink, Copy } from 'lucide-react';
+import { X, Cloud, Save, Link, CheckCircle, HelpCircle, ExternalLink, Copy, AlertTriangle } from 'lucide-react';
 import { CloudConfig } from '../types';
 
 interface CloudSetupModalProps {
@@ -82,8 +82,8 @@ function doPost(e) {
                     <CheckCircle size={16} /> Nasıl Çalışır?
                 </h3>
                 <p className="text-sm text-blue-700 dark:text-blue-200 opacity-90">
-                    Verileriniz kendi Google Hesabınızdaki bir Excel (Sheet) tablosunda saklanır. 
-                    Aşağıdaki adımları bir kere yaparak aldığınız linki, hem bilgisayarınıza hem telefonunuza girerseniz iki cihaz ortak çalışır.
+                    Verileriniz Google Hesabınızdaki bir Excel dosyasında saklanır. 
+                    Aşağıdaki adımları bir kere yaparak aldığınız linki, tüm cihazlarınıza girerseniz veriler ortak havuzda toplanır.
                 </p>
             </div>
 
@@ -91,45 +91,50 @@ function doPost(e) {
                 onClick={() => setShowGuide(!showGuide)}
                 className="w-full flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
             >
-                <span className="flex items-center gap-2"><HelpCircle size={16}/> Kurulum Rehberi (Sadece İlk Sefer)</span>
+                <span className="flex items-center gap-2"><HelpCircle size={16}/> Kurulum Rehberi (Link Alamayanlar İçin)</span>
                 <span>{showGuide ? 'Gizle' : 'Göster'}</span>
             </button>
 
             {showGuide && (
-                <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300 border-l-2 border-slate-200 dark:border-slate-600 pl-4">
+                <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300 border-l-2 border-slate-200 dark:border-slate-600 pl-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-r-lg">
                     <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white">Adım 1: Yeni E-Tablo</span>
-                        <a href="https://sheets.new" target="_blank" className="text-blue-600 hover:underline inline-flex items-center gap-1">
+                        <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 1: Kod Hazırlığı</span>
+                        <a href="https://sheets.new" target="_blank" className="text-blue-600 hover:underline inline-flex items-center gap-1 font-bold">
                             sheets.new <ExternalLink size={12}/>
-                        </a> adresine gidip yeni bir Google E-Tablo oluşturun.
-                    </div>
-                    
-                    <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white">Adım 2: Apps Script</span>
-                        <p>Tabloda üst menüden <strong>Uzantılar &gt; Apps Script</strong> seçeneğine tıklayın.</p>
-                    </div>
-
-                    <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white">Adım 3: Kodu Yapıştır</span>
-                        <p>Açılan sayfadaki kodları silin ve aşağıdaki butona tıklayıp kopyaladığınız kodu yapıştırın.</p>
-                        <button onClick={copyScriptCode} className="mt-2 px-3 py-1.5 bg-slate-200 dark:bg-slate-600 rounded text-xs font-bold flex items-center gap-2 hover:bg-slate-300 dark:hover:bg-slate-500">
+                        </a> adresine gidin. Üst menüden <strong>Uzantılar &gt; Apps Script</strong> seçin.
+                        <br/>Açılan sayfadaki kodları silin ve aşağıdaki butona tıklayıp kopyaladığınız kodu yapıştırın.
+                        <button onClick={copyScriptCode} className="mt-2 w-full py-2 bg-slate-200 dark:bg-slate-600 rounded text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-300 dark:hover:bg-slate-500">
                             <Copy size={14} /> Kodu Kopyala
                         </button>
                     </div>
 
                     <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white">Adım 4: Yayınla (Önemli!)</span>
-                        <p>Sağ üstteki <strong>Dağıt (Deploy) &gt; Yeni Dağıtım</strong> butonuna tıklayın.</p>
-                        <ul className="list-disc pl-5 text-xs opacity-80 mt-1 space-y-1">
-                            <li>Tür seçin: <strong>Web Uygulaması</strong></li>
-                            <li>Erişimi olanlar: <strong>Herkes (Anyone)</strong> (Bu çok önemli, yoksa uygulama veriye erişemez)</li>
-                            <li>Dağıt'a tıklayın ve izinleri onaylayın.</li>
+                        <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 2: Yayınlama (Çok Önemli)</span>
+                        <ul className="list-decimal pl-5 space-y-1">
+                            <li>Sağ üstteki mavi <strong>Dağıt (Deploy)</strong> butonuna bas -> <strong>Yeni Dağıtım (New Deployment)</strong> seç.</li>
+                            <li>Sol üstteki "Tür seçin" çark simgesine tıkla -> <strong>Web Uygulaması</strong> seç.</li>
+                            <li><span className="text-red-500 font-bold">Erişimi olanlar (Who has access):</span> Mutlaka <strong>"Herkes" (Anyone)</strong> seçilmeli.</li>
+                            <li>Dağıt butonuna bas.</li>
                         </ul>
                     </div>
 
+                    <div className="space-y-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-200 dark:border-amber-800">
+                        <span className="font-bold flex items-center gap-2 text-amber-800 dark:text-amber-400 text-base">
+                            <AlertTriangle size={16} /> Adım 3: İzin Verme (En Çok Takılınan Yer)
+                        </span>
+                        <p className="text-xs">Google, kendi yazdığınız kod olduğu için sizi uyaracaktır. Şunları yapın:</p>
+                        <ol className="list-decimal pl-5 text-xs font-bold space-y-1 text-slate-700 dark:text-slate-300">
+                            <li>"Erişimi Yetkilendir" butonuna basın ve hesabınızı seçin.</li>
+                            <li>"Google bu uygulamayı doğrulamadı" ekranı gelecektir.</li>
+                            <li>Sol alttaki <span className="text-blue-600">Gelişmiş (Advanced)</span> linkine tıklayın.</li>
+                            <li>Açılan kısmın en altındaki <span className="text-blue-600">... projesine git (güvenli değil)</span> linkine tıklayın.</li>
+                            <li>Son olarak "İzin Ver" (Allow) deyin.</li>
+                        </ol>
+                    </div>
+
                     <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white">Adım 5: Linki Al</span>
-                        <p>Size verilen <strong>Web Uygulaması URL</strong>'sini (script.google.com ile başlayan) kopyalayın.</p>
+                        <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 4: Linki Al</span>
+                        <p>Size verilen ve <code>/exec</code> ile biten Web Uygulaması URL'sini kopyalayıp aşağıdaki kutuya yapıştırın.</p>
                     </div>
                 </div>
             )}
