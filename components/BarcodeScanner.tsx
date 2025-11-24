@@ -102,7 +102,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
         if (html5QrCode.isScanning) {
             // @ts-ignore - Kütüphane tiplerinde eksiklik olabilir
             const track = html5QrCode.getRunningTrackCameraCapabilities();
-            const capabilities = html5QrCode.getRunningTrackCapabilities();
+            const capabilities = html5QrCode.getRunningTrackCapabilities() as any;
 
             if (capabilities.torch) {
                 setHasTorch(true);
