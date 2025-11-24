@@ -23,7 +23,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
       const matchesSearch = product.product_name.toLowerCase().includes(term) || 
                             (product.part_code && product.part_code.toLowerCase().includes(term)) ||
                             (product.location && product.location.toLowerCase().includes(term)) ||
-                            (product.category && product.category.toLowerCase().includes(term)) ||
+                            (product.material && product.material.toLowerCase().includes(term)) ||
                             (product.barcode && product.barcode.includes(term));
       return matchesSearch;
     });
@@ -75,7 +75,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="Parça Kodu, Adı, Kategori veya Reyon ara..."
+            placeholder="Parça Kodu, Adı, Hammadde veya Reyon ara..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
@@ -128,11 +128,6 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
                                             {product.part_code}
                                         </span>
                                     )}
-                                    {product.category && (
-                                        <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
-                                            <LayoutGrid size={10} /> {product.category}
-                                        </span>
-                                    )}
                                 </div>
                                 <h3 className="font-bold text-slate-800 dark:text-white text-lg leading-tight">
                                     {product.product_name}
@@ -154,8 +149,8 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
                             
                             {/* Hammadde */}
                             {product.material && (
-                                <div className="flex items-center gap-1">
-                                    <Hexagon size={14} className="text-slate-400" />
+                                <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400 font-medium">
+                                    <Hexagon size={14} />
                                     <span className="line-clamp-1">{product.material}</span>
                                 </div>
                             )}

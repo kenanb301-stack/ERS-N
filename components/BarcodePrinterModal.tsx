@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { X, Printer, CheckSquare, Square, AlertCircle } from 'lucide-react';
+import { X, Printer, CheckSquare, Square, AlertCircle, Search, Filter, Check } from 'lucide-react';
 import { Product } from '../types';
 import JsBarcode from 'jsbarcode';
 
@@ -14,20 +14,28 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [barcodeImages, setBarcodeImages] = useState<Record<string, string>>({});
   const [isGenerating, setIsGenerating] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Products that have a barcode value
   const validProducts = products.filter(p => (p.barcode && p.barcode.trim().length > 0) || (p.part_code && p.part_code.trim().length > 0));
 
+  // Filtered products based on search
+  const filteredProducts = validProducts.filter(p => 
+    searchTerm === '' || 
+    p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (p.part_code && p.part_code.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (p.location && p.location.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
   useEffect(() => {
     if (isOpen) {
-      // Reset selection when opening
+      // Reset selection and search when opening
       setSelectedProductIds(new Set());
+      setSearchTerm('');
       
       // Generate barcodes for ALL valid products immediately using an in-memory canvas
-      // This ensures images are ready for both preview and printing
       setIsGenerating(true);
       
-      // Use setTimeout to allow UI to render modal first
       const timer = setTimeout(() => {
           const newImages: Record<string, string> = {};
           const canvas = document.createElement('canvas'); // Off-screen canvas
@@ -45,7 +53,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                           fontSize: 14,
                           textMargin: 2,
                           margin: 0,
-                          background: "#ffffff" // Ensure white background for transparency safety
+                          background: "#ffffff"
                       });
                       newImages[product.id] = canvas.toDataURL("image/png");
                   }
@@ -60,7 +68,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
 
       return () => clearTimeout(timer);
     }
-  }, [isOpen, products]); // Re-run if products change or modal opens
+  }, [isOpen, products]);
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedProductIds);
@@ -72,12 +80,19 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
     setSelectedProductIds(newSet);
   };
 
-  const toggleAll = () => {
-    if (selectedProductIds.size === validProducts.length) {
-        setSelectedProductIds(new Set());
+  // Select/Deselect ONLY filtered products (Toplu İşlem Mantığı)
+  const toggleAllFiltered = () => {
+    const allFilteredSelected = filteredProducts.every(p => selectedProductIds.has(p.id));
+    const newSet = new Set(selectedProductIds);
+
+    if (allFilteredSelected) {
+        // Deselect currently filtered items
+        filteredProducts.forEach(p => newSet.delete(p.id));
     } else {
-        setSelectedProductIds(new Set(validProducts.map(p => p.id)));
+        // Select currently filtered items
+        filteredProducts.forEach(p => newSet.add(p.id));
     }
+    setSelectedProductIds(newSet);
   };
 
   const handlePrint = () => {
@@ -88,14 +103,13 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-      {/* Termal Yazıcı İçin Özel Stil Tanımları */}
+      {/* Yazıcı Stilleri */}
       <style>{`
         @media print {
             @page {
                 size: 56mm 40mm;
                 margin: 0;
             }
-            /* Kaydırma çubuklarını gizle - Siyah şerit sorununu çözer */
             ::-webkit-scrollbar {
                 display: none !important;
             }
@@ -122,7 +136,6 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 margin: 0;
                 padding: 0;
             }
-            /* Her etiket ayrı bir sayfadır */
             .label-container {
                 width: 56mm;
                 height: 40mm;
@@ -136,137 +149,156 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 background: white;
                 color: black;
                 overflow: hidden;
-                border: none !important; /* Kenarlık olmamasını garanti et */
+                border: none !important;
                 align-items: center;
                 justify-content: flex-start;
             }
-            /* Resimlerin net çıkması için */
             img {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
                 image-rendering: pixelated;
             }
         }
-        /* Ekran Önizleme Stilleri */
-        .screen-preview .label-container {
-            width: 56mm;
-            height: 40mm;
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 2mm 3mm;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            align-items: center;
-            justify-content: flex-start;
-        }
       `}</style>
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden transition-colors no-print">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden transition-colors no-print">
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
-          <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-            <Printer size={24} className="text-blue-600 dark:text-blue-400" />
-            Barkod Yazdır (56x40mm)
-          </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-            <X size={24} />
+          <div>
+              <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <Printer size={24} className="text-blue-600 dark:text-blue-400" />
+                Barkod Yazdır
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Etiket Boyutu: 56mm x 40mm</p>
+          </div>
+          <button onClick={onClose} className="p-2 bg-white dark:bg-slate-700 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors shadow-sm">
+            <X size={20} />
           </button>
         </div>
 
-        {/* Toolbar */}
-        <div className="p-4 bg-white dark:bg-slate-700 border-b border-slate-100 dark:border-slate-600 flex justify-between items-center">
-            <div className="flex items-center gap-4">
-                <button 
-                    onClick={toggleAll}
-                    disabled={isGenerating}
-                    className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50"
-                >
-                    {selectedProductIds.size === validProducts.length ? <CheckSquare size={18} /> : <Square size={18} />}
-                    Tümünü Seç / Kaldır
-                </button>
-                <span className="text-sm text-slate-400">
-                    {selectedProductIds.size} ürün seçildi
-                </span>
+        {/* Search and Filters Bar */}
+        <div className="p-4 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Parça kodu, ürün adı veya reyon ara..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                />
             </div>
             
             <div className="flex items-center gap-3">
-                 <div className="hidden lg:flex items-center gap-1 text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded border border-orange-100 dark:border-orange-900/40">
-                    <AlertCircle size={14} />
-                    <span>Kağıt boyutu: 56mm x 40mm</span>
-                </div>
+                <button 
+                    onClick={toggleAllFiltered}
+                    disabled={isGenerating || filteredProducts.length === 0}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors font-medium disabled:opacity-50 active:scale-95"
+                >
+                    {filteredProducts.length > 0 && filteredProducts.every(p => selectedProductIds.has(p.id)) ? <CheckSquare size={18} className="text-blue-600 dark:text-blue-400" /> : <Square size={18} />}
+                    <span className="hidden sm:inline">
+                        {filteredProducts.length > 0 && filteredProducts.every(p => selectedProductIds.has(p.id)) ? 'Seçimi Kaldır' : 'Tümünü Seç'}
+                    </span>
+                    <span className="sm:hidden">Tümü</span>
+                    <span className="bg-slate-200 dark:bg-slate-600 text-xs px-1.5 py-0.5 rounded-md ml-1">
+                        {filteredProducts.length}
+                    </span>
+                </button>
+
                 <button 
                     onClick={handlePrint}
                     disabled={selectedProductIds.size === 0 || isGenerating}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
                 >
                     <Printer size={18} />
-                    {isGenerating ? 'Hazırlanıyor...' : 'YAZDIR'}
+                    <span className="hidden sm:inline">YAZDIR</span>
+                    {selectedProductIds.size > 0 && (
+                        <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">
+                            {selectedProductIds.size}
+                        </span>
+                    )}
                 </button>
             </div>
         </div>
 
-        {/* Preview Area (Scrollable) */}
-        <div className="flex-1 overflow-y-auto p-8 bg-slate-100 dark:bg-slate-900 screen-preview">
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 dark:bg-slate-900">
             
             {isGenerating ? (
-                <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                        <p className="text-slate-500">Barkodlar oluşturuluyor...</p>
+                <div className="flex flex-col items-center justify-center h-full text-slate-500">
+                    <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p>Barkodlar oluşturuluyor...</p>
+                </div>
+            ) : filteredProducts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-64 text-slate-400 dark:text-slate-500">
+                    <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-3">
+                        <Filter size={32} />
                     </div>
+                    <p className="font-medium">Sonuç bulunamadı.</p>
+                    <p className="text-sm">Arama kriterlerinizi değiştirin.</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center">
-                    {validProducts.map(product => {
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 justify-items-center">
+                    {filteredProducts.map(product => {
                         const isSelected = selectedProductIds.has(product.id);
-                        const opacityClass = isSelected ? 'opacity-100 ring-2 ring-blue-500' : 'opacity-50 hover:opacity-80';
                         const imgSrc = barcodeImages[product.id];
 
                         return (
                             <div 
                                 key={product.id} 
-                                className={`relative group cursor-pointer transition-all duration-200 ${opacityClass}`} 
                                 onClick={() => toggleSelection(product.id)}
+                                className={`
+                                    relative w-full aspect-[1.4] bg-white rounded-xl cursor-pointer transition-all duration-200 group
+                                    flex flex-col overflow-hidden select-none
+                                    ${isSelected 
+                                        ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-900 shadow-md transform scale-[1.02]' 
+                                        : 'hover:shadow-lg border border-slate-200 hover:border-blue-300 dark:border-slate-700'
+                                    }
+                                `}
                             >
-                                {/* EKRAN ÖNİZLEME */}
-                                <div className="label-container bg-white shadow-sm">
-                                    <div className="w-full flex justify-between items-center mb-2">
-                                        <div className="text-[18px] font-black font-mono text-slate-800 tracking-tighter leading-none">
-                                            {product.part_code || 'KODSUZ'}
-                                        </div>
-                                        <div className="text-[12px] font-bold border-2 border-black px-1.5 py-0.5 rounded text-black">
-                                            {product.location || '-'}
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
-                                        {imgSrc ? (
-                                            <img src={imgSrc} alt="barcode" className="max-w-full h-auto" />
-                                        ) : (
-                                            <span className="text-[8px] text-red-500">Hata</span>
-                                        )}
+                                {/* Selection Badge */}
+                                <div className={`absolute top-2 right-2 z-10 transition-transform duration-200 ${isSelected ? 'scale-100' : 'scale-0'}`}>
+                                    <div className="bg-blue-600 text-white rounded-full p-1 shadow-sm">
+                                        <Check size={14} strokeWidth={3} />
                                     </div>
                                 </div>
 
-                                {isSelected && (
-                                    <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-md">
-                                        <CheckSquare size={16} />
+                                {/* Card Content (Mimics Label) */}
+                                <div className="flex-1 flex flex-col p-3 items-center justify-center bg-white">
+                                    <div className="w-full flex justify-between items-center mb-2 px-1">
+                                        <span className={`font-mono font-black text-slate-800 leading-none truncate ${product.part_code && product.part_code.length > 10 ? 'text-xs' : 'text-sm'}`}>
+                                            {product.part_code || 'KODSUZ'}
+                                        </span>
+                                        {product.location && (
+                                            <span className="text-[10px] font-bold border border-slate-800 text-slate-800 px-1 rounded">
+                                                {product.location}
+                                            </span>
+                                        )}
                                     </div>
+                                    
+                                    <div className="flex-1 w-full flex items-center justify-center bg-slate-50 rounded-lg p-2">
+                                        {imgSrc ? (
+                                            <img src={imgSrc} alt="barcode" className="max-w-full max-h-full object-contain mix-blend-multiply" />
+                                        ) : (
+                                            <span className="text-[10px] text-red-400">Hata</span>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="w-full mt-2 text-center">
+                                         <p className="text-[10px] text-slate-500 truncate w-full px-2">
+                                             {product.product_name}
+                                         </p>
+                                    </div>
+                                </div>
+                                
+                                {/* Hover Overlay for non-selected */}
+                                {!isSelected && (
+                                    <div className="absolute inset-0 bg-blue-50/0 group-hover:bg-blue-50/10 transition-colors" />
                                 )}
                             </div>
                         );
                     })}
-                </div>
-            )}
-
-            {!isGenerating && validProducts.length === 0 && (
-                <div className="text-center py-20 text-slate-400 dark:text-slate-500">
-                    <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
-                    <p>Barkod basılabilecek ürün bulunamadı.</p>
                 </div>
             )}
         </div>
@@ -285,7 +317,6 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                     </span>
                 </div>
                 
-                {/* DOĞRUDAN IMG KULLANIMI (Canvas değil) */}
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', flex: 1 }}>
                     {barcodeImages[product.id] ? (
                          <img 

@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { Product, Transaction, TransactionType } from '../types';
-import { PieChart, TrendingUp, AlertTriangle, Package, CheckCircle, BarChart3, ArrowDown, ArrowUp } from 'lucide-react';
+import { PieChart, TrendingUp, AlertTriangle, Package, CheckCircle, BarChart3, ArrowDown, ArrowUp, Hexagon } from 'lucide-react';
 
 interface AnalyticsProps {
   products: Product[];
@@ -9,14 +9,14 @@ interface AnalyticsProps {
 }
 
 const Analytics: React.FC<AnalyticsProps> = ({ products, transactions }) => {
-  // 1. Kategori Bazlı Dağılım
-  const categoryStats = useMemo(() => {
+  // 1. Hammadde Bazlı Dağılım
+  const materialStats = useMemo(() => {
     const stats: Record<string, number> = {};
     let totalItems = 0;
     
     products.forEach(p => {
-        const cat = p.category || 'Diğer';
-        stats[cat] = (stats[cat] || 0) + 1;
+        const mat = p.material || 'Diğer';
+        stats[mat] = (stats[mat] || 0) + 1;
         totalItems++;
     });
 
@@ -125,28 +125,28 @@ const Analytics: React.FC<AnalyticsProps> = ({ products, transactions }) => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* Kategori Dağılımı Grafiği (Simple CSS Bars) */}
+            {/* Hammadde Dağılımı Grafiği */}
             <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
-                    <PieChart size={20} className="text-slate-400" />
-                    Kategori Dağılımı
+                    <Hexagon size={20} className="text-slate-400" />
+                    Hammadde Dağılımı
                 </h3>
-                <div className="space-y-4">
-                    {categoryStats.map((cat, index) => (
-                        <div key={cat.name}>
+                <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
+                    {materialStats.map((mat, index) => (
+                        <div key={mat.name}>
                             <div className="flex justify-between text-sm mb-1">
-                                <span className="font-medium text-slate-700 dark:text-slate-200">{cat.name}</span>
-                                <span className="text-slate-500 dark:text-slate-400">{cat.count} Ürün (%{cat.percentage})</span>
+                                <span className="font-medium text-slate-700 dark:text-slate-200">{mat.name}</span>
+                                <span className="text-slate-500 dark:text-slate-400">{mat.count} Ürün (%{mat.percentage})</span>
                             </div>
                             <div className="w-full bg-slate-100 dark:bg-slate-700 h-3 rounded-full overflow-hidden">
                                 <div 
                                     className={`h-full rounded-full ${COLORS[index % COLORS.length]}`} 
-                                    style={{ width: `${cat.percentage}%` }}
+                                    style={{ width: `${mat.percentage}%` }}
                                 ></div>
                             </div>
                         </div>
                     ))}
-                    {categoryStats.length === 0 && (
+                    {materialStats.length === 0 && (
                         <p className="text-slate-400 text-center py-4">Veri bulunamadı.</p>
                     )}
                 </div>

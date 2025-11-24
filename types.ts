@@ -8,7 +8,6 @@ export interface Product {
   id: string;
   product_name: string; // "Açıklama" olarak kullanılacak
   part_code?: string;   // Örn: P-00003
-  category?: string;    // YENİ: Kategori (Örn: Hırdavat, Hammadde)
   location?: string;    // Örn: B1-06-06 (Reyon)
   material?: string;    // Örn: ST37 SOĞUK ÇEKME (Hammadde)
   min_stock_level: number;
