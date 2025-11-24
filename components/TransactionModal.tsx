@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2, QrCode, Hash } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2, ScanLine, Hash } from 'lucide-react';
 import { Product, Transaction, TransactionType } from '../types';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -210,7 +210,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 <div className="flex gap-2 mb-2">
                     <input 
                         type="text"
-                        placeholder="QR Kod okut..."
+                        placeholder="Barkod okut..."
                         value={scannedBarcode}
                         onChange={(e) => {
                             setScannedBarcode(e.target.value);
@@ -229,7 +229,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         onClick={() => setShowScanner(true)}
                         className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 transition-transform"
                     >
-                        <QrCode size={20} />
+                        <ScanLine size={20} />
                     </button>
                 </div>
             )}

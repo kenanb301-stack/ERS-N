@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, QrCode, LogOut } from 'lucide-react';
 import Dashboard from './components/Dashboard';

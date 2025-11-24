@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, QrCode, MapPin, Hexagon, Hash } from 'lucide-react';
+import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, ScanLine, MapPin, Hexagon, Hash } from 'lucide-react';
 import { UNITS } from '../constants';
 import { Product } from '../types';
 import BarcodeScanner from './BarcodeScanner';
@@ -221,10 +220,10 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
               </div>
             </div>
 
-            {/* QR Kod */}
+            {/* Barkod Alanı */}
             <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-700">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">QR Kod / Barkod Verisi</label>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Barkod Verisi</label>
                   <div className="flex gap-2">
                       <input
                         type="text"
@@ -239,7 +238,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
                         className="p-3 bg-slate-100 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-500 transition-colors"
                         title="Kamerayı Aç"
                       >
-                          <QrCode size={24} />
+                          <ScanLine size={24} />
                       </button>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">Boş bırakılırsa otomatik olarak Parça Kodu kullanılır.</p>

@@ -1,7 +1,6 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { X, Camera } from 'lucide-react';
+import { X, Camera, ScanLine } from 'lucide-react';
 
 interface BarcodeScannerProps {
   onScanSuccess: (decodedText: string) => void;
@@ -39,8 +38,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
 
       const config = {
         fps: 10,
-        qrbox: { width: 250, height: 250 },
-        // aspectRatio kaldırıldı: Mobilde OverconstrainedError hatasını önler
+        qrbox: { width: 280, height: 150 }, // Dikdörtgen barkod alanı
       };
 
       try {
@@ -67,7 +65,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
             }
           },
           (errorMessage) => {
-            // Okuma hatası (QR bulunamadı) - sessizce geç
+            // Okuma hatası (QR/Barkod bulunamadı) - sessizce geç
           }
         );
       } catch (err) {
@@ -114,7 +112,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
       <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-20 bg-gradient-to-b from-black/70 to-transparent">
         <div className="text-white flex items-center gap-2">
             <Camera className="text-blue-400 animate-pulse" />
-            <span className="font-bold text-sm tracking-wider">TARAYICI AKTİF</span>
+            <span className="font-bold text-sm tracking-wider">BARKOD OKUYUCU</span>
         </div>
         <button 
             onClick={() => {
@@ -154,19 +152,19 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
                 {/* Overlay UI */}
                 {!error && (
                     <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                        {/* Scan Area Box */}
-                        <div className="w-64 h-64 border-2 border-white/30 rounded-3xl relative overflow-hidden bg-white/5 backdrop-blur-[1px]">
+                        {/* Scan Area Box - Rectangular for Barcode */}
+                        <div className="w-72 h-40 border-2 border-white/30 rounded-xl relative overflow-hidden bg-white/5 backdrop-blur-[1px]">
                             {/* Scanning Line Animation */}
-                            <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.8)] animate-[scan_2s_ease-in-out_infinite]"></div>
+                            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-full bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-[scan-horizontal_2s_ease-in-out_infinite]"></div>
                             
                             {/* Corners */}
-                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
-                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
-                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl"></div>
-                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl"></div>
+                            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-red-500 rounded-tl-lg"></div>
+                            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-red-500 rounded-tr-lg"></div>
+                            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-red-500 rounded-bl-lg"></div>
+                            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-red-500 rounded-br-lg"></div>
                         </div>
-                        <p className="mt-8 text-white/90 text-sm font-bold bg-black/60 px-6 py-2 rounded-full backdrop-blur-md">
-                            QR Kodu hizalayın
+                        <p className="mt-8 text-white/90 text-sm font-bold bg-black/60 px-6 py-2 rounded-full backdrop-blur-md flex items-center gap-2">
+                            <ScanLine size={16} /> Barkodu çizgiye hizalayın
                         </p>
                     </div>
                 )}
@@ -175,11 +173,11 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
       </div>
 
       <style>{`
-        @keyframes scan {
-            0% { top: 0; opacity: 0; }
+        @keyframes scan-horizontal {
+            0% { left: 0; opacity: 0; }
             10% { opacity: 1; }
             90% { opacity: 1; }
-            100% { top: 100%; opacity: 0; }
+            100% { left: 100%; opacity: 0; }
         }
         /* Hide html5-qrcode default elements and ensure video covers screen */
         #reader { width: 100% !important; height: 100% !important; border: none !important; }

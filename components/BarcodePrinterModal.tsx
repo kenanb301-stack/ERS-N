@@ -1,10 +1,7 @@
-
 import React, { useEffect, useState } from 'react';
 import { X, Printer, CheckSquare, Square, AlertCircle } from 'lucide-react';
 import { Product } from '../types';
-
-// Declare QRCode library variable (loaded from CDN in index.html)
-declare var QRCode: any;
+import JsBarcode from 'jsbarcode';
 
 interface BarcodePrinterModalProps {
   isOpen: boolean;
@@ -34,22 +31,22 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 if (product) {
                     try {
                         const codeToUse = product.barcode || product.part_code;
-                        const canvas = document.getElementById(`qr-canvas-${id}`) as HTMLCanvasElement;
+                        const canvas = document.getElementById(`barcode-canvas-${id}`) as HTMLCanvasElement;
+                        
                         if (canvas && codeToUse) {
-                            // Clear previous
-                            const ctx = canvas.getContext('2d');
-                            ctx?.clearRect(0, 0, canvas.width, canvas.height);
-                            
-                            QRCode.toCanvas(canvas, codeToUse, { 
-                                width: 250, // Yüksek çözünürlük
-                                margin: 1,  // Beyaz kenar boşluğunu azalttık
-                                errorCorrectionLevel: 'M'
-                            }, function (error: any) {
-                                if (error) console.error(error)
-                            })
+                            JsBarcode(canvas, codeToUse, {
+                                format: "CODE128",
+                                lineColor: "#000",
+                                width: 2,
+                                height: 50,
+                                displayValue: true,
+                                fontSize: 14,
+                                textMargin: 2,
+                                margin: 0
+                            });
                         }
                     } catch (e) {
-                        console.error("QR Code generation error", e);
+                        console.error("Barcode generation error", e);
                     }
                 }
             });
@@ -112,7 +109,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 page-break-after: always;
                 page-break-inside: avoid;
                 position: relative;
-                padding: 3mm; /* Kenar boşluğu */
+                padding: 2mm;
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
@@ -120,6 +117,8 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 color: black;
                 overflow: hidden;
                 border: none;
+                align-items: center;
+                justify-content: center;
             }
             /* Yazdırırken arkaplan grafikleri zorla */
             * {
@@ -134,11 +133,13 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
             background: white;
             border: 1px solid #ddd;
             border-radius: 4px;
-            padding: 3mm;
+            padding: 2mm;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            align-items: center;
+            justify-content: center;
         }
       `}</style>
 
@@ -148,7 +149,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
           <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <Printer size={24} className="text-blue-600 dark:text-blue-400" />
-            Etiket Yazdır (Argox 56x40mm)
+            Barkod Yazdır (56x40mm)
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <X size={24} />
@@ -173,7 +174,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
             <div className="flex items-center gap-3">
                  <div className="hidden lg:flex items-center gap-1 text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded border border-orange-100 dark:border-orange-900/40">
                     <AlertCircle size={14} />
-                    <span>Yazıcı ayarlarında kağıt boyutu 56mm x 40mm olmalıdır.</span>
+                    <span>Kağıt boyutu: 56mm x 40mm</span>
                 </div>
                 <button 
                     onClick={handlePrint}
@@ -202,21 +203,21 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                             className={`relative group cursor-pointer transition-all duration-200 ${opacityClass}`} 
                             onClick={() => toggleSelection(product.id)}
                         >
-                            {/* EKRAN İÇİN TASARIM - SADELEŞTİRİLMİŞ */}
+                            {/* EKRAN İÇİN TASARIM - BARKOD ODAKLI */}
                             <div className="label-container bg-white shadow-sm">
-                                {/* ÜST: Parça Kodu (Sol) - Reyon (Sağ) */}
-                                <div className="flex justify-between items-center mb-2 h-[12mm]">
-                                    <div className="font-mono font-black text-xl text-black uppercase leading-none">
-                                        {product.part_code || product.barcode}
+                                {/* Üst Bilgi */}
+                                <div className="w-full flex justify-between items-center mb-1">
+                                    <div className="text-[10px] font-bold text-slate-600 uppercase truncate max-w-[60%]">
+                                        {product.product_name}
                                     </div>
-                                    <div className="border-2 border-black px-1 py-0.5 text-xs font-bold text-black uppercase whitespace-nowrap">
+                                    <div className="text-[10px] font-bold border border-black px-1 rounded">
                                         {product.location || 'RAF YOK'}
                                     </div>
                                 </div>
                                 
-                                {/* ALT: Sadece QR Kod (Ortalanmış) */}
-                                <div className="flex-1 flex items-center justify-center pt-1">
-                                    <canvas id={`qr-canvas-${product.id}`} className="max-h-[22mm] max-w-full"></canvas>
+                                {/* Barkod */}
+                                <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
+                                    <canvas id={`barcode-canvas-${product.id}`} className="max-w-full h-auto"></canvas>
                                 </div>
                             </div>
 
@@ -244,56 +245,22 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
       <div id="print-area">
         {validProducts.filter(p => selectedProductIds.has(p.id)).map(product => (
             <div key={`print-${product.id}`} className="label-container">
-                {/* 1. SATIR: PARÇA KODU (Sol - Büyük) ve REYON (Sağ - Kutulu) */}
-                <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    height: '10mm',
-                    marginBottom: '2mm'
-                }}>
-                    <div style={{ 
-                        fontSize: '16pt', 
-                        fontWeight: '900', 
-                        fontFamily: 'monospace', 
-                        textTransform: 'uppercase',
-                        lineHeight: '1'
-                    }}>
-                        {product.part_code || product.barcode || '-'}
-                    </div>
-                    <div style={{ 
-                        border: '2px solid black', 
-                        padding: '1mm 2mm', 
-                        fontSize: '11pt', 
-                        fontWeight: 'bold',
-                        whiteSpace: 'nowrap'
-                    }}>
-                        {product.location || '-'}
-                    </div>
-                </div>
-
-                {/* 2. SATIR: SADECE QR KOD (Ortalanmış ve Maksimum Boyut) */}
-                <div style={{ 
-                    flex: 1, 
-                    display: 'flex', 
-                    justifyContent: 'center', 
-                    alignItems: 'center',
-                    padding: '1mm'
-                }}>
-                    <img 
-                        id={`qr-img-${product.id}`} 
-                        src={(document.getElementById(`qr-canvas-${product.id}`) as HTMLCanvasElement)?.toDataURL() || ''} 
-                        style={{ 
-                            height: '100%', 
-                            width: 'auto', 
-                            maxHeight: '24mm', // Etiketin kalan yüksekliğine sığdır
-                            display: 'block' 
-                        }}
-                        alt="qr"
-                    />
+                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', marginBottom: '2mm' }}>
+                    <span style={{ fontSize: '9pt', fontWeight: 'bold', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', maxWidth: '35mm' }}>
+                        {product.product_name.substring(0, 18)}
+                    </span>
+                    <span style={{ fontSize: '9pt', fontWeight: 'bold', border: '1px solid black', padding: '0 2px' }}>
+                        {product.location}
+                    </span>
                 </div>
                 
-                {/* NOT: product_name ve material KODDAN SİLİNDİ */}
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+                    <img 
+                        src={(document.getElementById(`barcode-canvas-${product.id}`) as HTMLCanvasElement)?.toDataURL() || ''} 
+                        style={{ maxWidth: '100%', maxHeight: '25mm' }}
+                        alt="barcode"
+                    />
+                </div>
             </div>
         ))}
       </div>
