@@ -20,10 +20,10 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
 
   useEffect(() => {
     if (isOpen) {
-      // Select all by default when opened
-      setSelectedProductIds(new Set(validProducts.map(p => p.id)));
+      // Varsayılan olarak hiçbir şeyi seçme (Kullanıcı kendi seçsin)
+      setSelectedProductIds(new Set());
     }
-  }, [isOpen, products]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && selectedProductIds.size > 0) {
@@ -41,9 +41,9 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                             ctx?.clearRect(0, 0, canvas.width, canvas.height);
                             
                             QRCode.toCanvas(canvas, codeToUse, { 
-                                width: 80, // Optimized for 56x40mm layout
+                                width: 128, // Daha net baskı için çözünürlük artırıldı
                                 margin: 0,
-                                errorCorrectionLevel: 'L' // Low error correction allows for less density/cleaner print on small labels
+                                errorCorrectionLevel: 'L'
                             }, function (error: any) {
                                 if (error) console.error(error)
                             })
@@ -55,7 +55,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
             });
         }, 300);
     }
-  }, [isOpen, selectedProductIds]);
+  }, [isOpen, selectedProductIds, validProducts]);
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedProductIds);
@@ -120,7 +120,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 background: white;
                 color: black;
                 overflow: hidden;
-                border: none; /* Baskıda çerçeve çıkmasın */
+                border: none;
             }
             /* Yazdırırken arkaplan grafikleri zorla */
             * {
@@ -195,15 +195,17 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center">
                 {validProducts.map(product => {
                     const isSelected = selectedProductIds.has(product.id);
-                    if (!isSelected) return null;
+                    // Seçili değilse biraz silik göster, ama yine de göster ki tıklanabilsin
+                    const opacityClass = isSelected ? 'opacity-100 ring-2 ring-blue-500' : 'opacity-50 hover:opacity-80';
 
                     return (
-                        <div key={product.id} className="relative group cursor-pointer" onClick={() => toggleSelection(product.id)}>
-                            {/* Etiket Tasarımı (DOM Klonlama yapılacak yer burası değil, render mantığı print-area'da) */}
-                            {/* Burada sadece görsel temsil var, ancak asıl içerik aşağıda oluşturulup kopyalanıyor */}
-                            
+                        <div 
+                            key={product.id} 
+                            className={`relative group cursor-pointer transition-all duration-200 ${opacityClass}`} 
+                            onClick={() => toggleSelection(product.id)}
+                        >
                             {/* EKRAN İÇİN TASARIM */}
-                            <div className="label-container transition-transform hover:scale-105 origin-center">
+                            <div className="label-container bg-white shadow-sm">
                                 {/* Satır 1: Parça Kodu ve Reyon */}
                                 <div className="flex justify-between items-start mb-1 border-b border-black pb-1">
                                     <div className="font-extrabold text-lg leading-none font-mono text-black uppercase">
@@ -226,27 +228,29 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                                         </div>
                                     </div>
 
-                                    {/* Sağ: QR Kod */}
-                                    <div className="w-[20mm] flex-shrink-0 flex items-end justify-end">
-                                        {/* Canvas ID'si benzersiz olmalı */}
+                                    {/* Sağ: QR Kod - Ekran Önizleme */}
+                                    {/* w-[28mm] yaparak büyüttük */}
+                                    <div className="w-[28mm] flex-shrink-0 flex items-end justify-center pr-1">
                                         <canvas id={`qr-canvas-${product.id}`} className="w-full h-auto"></canvas>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Seçim İndikatörü */}
-                            <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
-                                <CheckSquare size={14} />
-                            </div>
+                            {isSelected && (
+                                <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-md">
+                                    <CheckSquare size={16} />
+                                </div>
+                            )}
                         </div>
                     );
                 })}
             </div>
 
-            {selectedProductIds.size === 0 && (
+            {validProducts.length === 0 && (
                 <div className="text-center py-20 text-slate-400 dark:text-slate-500">
-                    <Printer size={48} className="mx-auto mb-4 opacity-50" />
-                    <p>Yazdırılacak ürün seçiniz.</p>
+                    <AlertCircle size={48} className="mx-auto mb-4 opacity-50" />
+                    <p>Barkod basılabilecek ürün bulunamadı.</p>
                 </div>
             )}
         </div>
@@ -281,8 +285,8 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                     </div>
                     
                     {/* Sağ taraf: QR Code Resmi */}
-                    <div style={{ width: '22mm', display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end' }}>
-                        {/* Canvas'ı resme çevirip buraya koyuyoruz çünkü print işleminde canvas bazen boş çıkabilir */}
+                    {/* Width 28mm'ye çıkarıldı ve padding-right ile hafif sola çekildi */}
+                    <div style={{ width: '28mm', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingRight: '2mm' }}>
                         <img 
                             id={`qr-img-${product.id}`} 
                             src={(document.getElementById(`qr-canvas-${product.id}`) as HTMLCanvasElement)?.toDataURL() || ''} 
