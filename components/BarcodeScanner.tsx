@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { X, Camera, ScanLine, Zap, ZapOff, ZoomIn, ZoomOut, AlertTriangle, RefreshCw, Info } from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
+import { X, Camera, Zap, ZapOff, ZoomIn, ZoomOut, AlertTriangle, RefreshCw, Info } from 'lucide-react';
 
 interface BarcodeScannerProps {
   onScanSuccess: (decodedText: string) => void;
@@ -16,17 +16,16 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
   const [torchOn, setTorchOn] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [zoomCap, setZoomCap] = useState<{min: number, max: number} | null>(null);
-  const [status, setStatus] = useState<string>('Kamera izni kontrol ediliyor...');
+  const [status, setStatus] = useState<string>('Kamera hazırlanıyor...');
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const mountedRef = useRef<boolean>(true);
   const isScanningRef = useRef<boolean>(false);
 
-  // Ses efekti
   const playBeep = () => {
     try {
         const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-        audio.play().catch(e => { /* Audio play error ignored */ });
+        audio.play().catch(() => {});
     } catch (e) {
         // Ignore audio errors
     }
@@ -36,7 +35,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
     mountedRef.current = true;
     isScanningRef.current = false;
 
-    // 1. HTTPS Kontrolü
+    // 1. HTTPS Kontrolü (Localhost hariç)
     if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
         setError("Güvenlik nedeniyle kamera sadece HTTPS veya Localhost üzerinde çalışır.");
         return;
@@ -55,110 +54,103 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
         }
       }
 
-      // 2. Format Kısıtlaması (Code 128, EAN, QR) - Performans için
+      // Scanner örneğini oluştur
       const html5QrCode = new Html5Qrcode("reader", { 
           verbose: false,
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.QR_CODE,
-          ]
       });
       scannerRef.current = html5QrCode;
 
-      // 3. İzin Kontrolü (Önden kontrol ederek hatayı net yakalıyoruz)
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        // İzin alındı, hemen akışı durdurup kütüphaneye bırakıyoruz
-        stream.getTracks().forEach(track => track.stop());
-      } catch (permErr: any) {
-        console.error("Permission Error:", permErr);
-        setError("Kamera izni verilmedi veya erişilemiyor.");
-        setDebugError(`${permErr.name}: ${permErr.message}`);
-        return;
-      }
-
-      // 4. Kademeli Başlatma Stratejileri
-      const strategies = [
-        // Strateji 1: Arka Kamera (En iyi deneyim)
-        { name: "Arka Kamera", config: { facingMode: "environment" } },
-        // Strateji 2: Ön Kamera (Tablet/Laptop)
-        { name: "Ön Kamera", config: { facingMode: "user" } },
-        // Strateji 3: Herhangi bir kamera (Kısıtlama yok)
-        { name: "Genel Mod", config: true }
-      ];
-
-      // Ortak QR Ayarları
+      // QR Yapılandırması - Aspect Ratio kaldırıldı (Hata önleme)
       const qrConfig = {
-        fps: 10, // 15 yerine 10 daha stabil
+        fps: 10,
         qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0, 
         disableFlip: false,
       };
 
-      for (const strategy of strategies) {
-        if (!mountedRef.current) break;
-        if (isScanningRef.current) break;
-
+      try {
+        setStatus("İzinler kontrol ediliyor...");
+        
+        // Önce cihazları listele (En güvenilir yöntem)
+        let cameras: Array<any> = [];
         try {
-            setStatus(`${strategy.name} başlatılıyor...`);
-            console.log(`Trying strategy: ${strategy.name}`);
-            
-            await html5QrCode.start(
-                strategy.config, 
-                qrConfig,
-                (decodedText) => {
-                    if (!mountedRef.current) return;
-                    // Çoklu okumayı önle
-                    if (isScanningRef.current) return; 
-                    
-                    playBeep();
-                    isScanningRef.current = true; // Flag set
-
-                    // Başarılı okuma sonrası durdur
-                    html5QrCode.stop().then(() => {
-                        html5QrCode.clear();
-                        onScanSuccess(decodedText);
-                    }).catch(err => {
-                        console.warn("Stop failed", err);
-                        onScanSuccess(decodedText); // Yine de devam et
-                    });
-                },
-                (errorMessage) => {
-                    // Okuma hatası - Kullanıcıya göstermeye gerek yok
-                }
-            );
-            
-            // Başarılı olduysa döngüden çık
-            setStatus("");
-            isScanningRef.current = false; // Scanning but waiting for code
-            
-            // Yetenekleri Kontrol Et (Flaş / Zoom)
-            try {
-                // @ts-ignore
-                const capabilities = html5QrCode.getRunningTrackCapabilities() as any;
-                if (capabilities) {
-                    if (capabilities.torch) setHasTorch(true);
-                    if (capabilities.zoom) {
-                        setZoomCap({ min: capabilities.zoom.min, max: capabilities.zoom.max });
-                        setZoom(capabilities.zoom.min);
-                    }
-                }
-            } catch (capErr) {
-                console.log("Capabilities check failed", capErr);
-            }
-            
-            return; // Başarılı, fonksiyondan çık
-
-        } catch (err: any) {
-            console.warn(`${strategy.name} failed:`, err);
-            // Son strateji de başarısız olursa hata göster
-            if (strategy === strategies[strategies.length - 1]) {
-                setError("Kamera başlatılamadı.");
-                setDebugError(`${err.name}: ${err.message}`);
-            }
+            cameras = await Html5Qrcode.getCameras();
+        } catch (e) {
+            console.warn("Kamera listesi alınamadı, izin verilmemiş olabilir.", e);
+            throw new Error("Kamera erişim izni verilmedi.");
         }
+
+        if (!cameras || cameras.length === 0) {
+            throw new Error("Cihazda kamera bulunamadı.");
+        }
+
+        // Arka kamerayı bulmaya çalış
+        let selectedCameraId = cameras[0].id; // Varsayılan: ilk kamera
+        
+        // "back" veya "environment" içeren kamerayı ara
+        const backCamera = cameras.find(c => 
+            c.label.toLowerCase().includes('back') || 
+            c.label.toLowerCase().includes('arka') || 
+            c.label.toLowerCase().includes('environment')
+        );
+
+        if (backCamera) {
+            selectedCameraId = backCamera.id;
+        } else if (cameras.length > 1) {
+            // Eğer etiketlerden bulunamazsa ve birden fazla kamera varsa, genelde sonuncu kamera arka kameradır
+            selectedCameraId = cameras[cameras.length - 1].id;
+        }
+
+        setStatus("Kamera başlatılıyor...");
+
+        const successCallback = (decodedText: string) => {
+            if (!mountedRef.current) return;
+            if (isScanningRef.current) return; 
+            
+            playBeep();
+            isScanningRef.current = true;
+
+            html5QrCode.stop().then(() => {
+                html5QrCode.clear();
+                onScanSuccess(decodedText);
+            }).catch(() => {
+                onScanSuccess(decodedText);
+            });
+        };
+
+        // Kamerayı ID ile başlatmayı dene (En kararlı yöntem)
+        try {
+            await html5QrCode.start(selectedCameraId, qrConfig, successCallback, () => {});
+        } catch (startError) {
+            console.warn("ID ile başlatma başarısız, genel mod deneniyor...", startError);
+            // ID başarısız olursa genel 'environment' modunu dene
+            // Fix TypeScript build error: cast config object to any
+            await html5QrCode.start({ facingMode: "environment" } as any, qrConfig, successCallback, () => {});
+        }
+
+        // Başarılı
+        setStatus("");
+        
+        // Yetenek Kontrolü (Flash / Zoom)
+        try {
+            const track = html5QrCode.getRunningTrackCameraCapabilities();
+            // TypeScript Hatası Düzeltmesi: 'as any' kullanımı
+            const capabilities = html5QrCode.getRunningTrackCapabilities() as any;
+            
+            if (capabilities) {
+                if ('torch' in capabilities) setHasTorch(true);
+                if ('zoom' in capabilities) {
+                    setZoomCap({ min: capabilities.zoom.min, max: capabilities.zoom.max });
+                    setZoom(capabilities.zoom.min);
+                }
+            }
+        } catch (capErr) {
+            console.log("Capabilities check failed", capErr);
+        }
+
+      } catch (err: any) {
+        console.error("Scanner Error:", err);
+        setError("Kamera başlatılamadı.");
+        setDebugError(`${err.name}: ${err.message}`);
       }
     };
 
@@ -169,7 +161,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
       clearTimeout(timer);
       mountedRef.current = false;
       if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().catch(e => console.error("Cleanup stop failed", e));
+        scannerRef.current.stop().catch(() => {});
         scannerRef.current.clear();
       }
     };
@@ -178,11 +170,14 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
   const toggleTorch = () => {
       if (scannerRef.current && hasTorch) {
           const newStatus = !torchOn;
-          scannerRef.current.applyVideoConstraints({
+          // TypeScript Hatası Düzeltmesi: 'as any' kullanımı
+          const constraints = {
               advanced: [{ torch: newStatus }]
-          } as any).then(() => {
-              setTorchOn(newStatus);
-          }).catch(err => console.error("Torch toggle failed", err));
+          } as any;
+          
+          scannerRef.current.applyVideoConstraints(constraints)
+            .then(() => setTorchOn(newStatus))
+            .catch(err => console.error("Torch toggle failed", err));
       }
   };
 
@@ -190,9 +185,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
       const newZoom = Number(e.target.value);
       setZoom(newZoom);
       if (scannerRef.current) {
-          scannerRef.current.applyVideoConstraints({
+          // TypeScript Hatası Düzeltmesi: 'as any' kullanımı
+          const constraints = {
               advanced: [{ zoom: newZoom }]
-          } as any).catch(err => console.error("Zoom failed", err));
+          } as any;
+          
+          scannerRef.current.applyVideoConstraints(constraints)
+            .catch(err => console.error("Zoom failed", err));
       }
   };
 
