@@ -132,41 +132,54 @@ function App() {
         const oldProductId = oldTransaction.product_id;
         const newProductId = data.productId;
 
-        // Calculate logic...
         setProducts(prevProducts => {
             return prevProducts.map(p => {
                 let stock = p.current_stock;
-
-                // Step 1: Revert Old Transaction Effect
+                
+                // Revert & Apply Logic
                 if (p.id === oldProductId) {
-                    if (oldTransaction.type === TransactionType.IN) {
-                        stock -= oldTransaction.quantity; // Revert IN: subtract
-                    } else {
-                        stock += oldTransaction.quantity; // Revert OUT: add
-                    }
+                    stock = oldTransaction.type === TransactionType.IN 
+                        ? stock - oldTransaction.quantity 
+                        : stock + oldTransaction.quantity;
                 }
-
-                // Step 2: Apply New Transaction Effect
+                
                 if (p.id === newProductId) {
-                     if (data.type === TransactionType.IN) {
-                         stock += data.quantity; // Apply IN: add
-                     } else {
-                         stock -= data.quantity; // Apply OUT: subtract
-                     }
+                     stock = data.type === TransactionType.IN 
+                        ? stock + data.quantity 
+                        : stock - data.quantity;
                 }
 
-                return { ...p, current_stock: stock };
+                // CRITICAL STOCK DATE LOGIC
+                let criticalSince = p.critical_since;
+                let lastAlert = p.last_alert_sent_at;
+                
+                // Eğer ürün şu an kritik seviyedeyse
+                if (stock <= p.min_stock_level) {
+                    // Ve daha önce kritik değilseydi (veya tarih yoksa)
+                    if (!criticalSince) {
+                        criticalSince = new Date().toISOString();
+                        lastAlert = undefined; // Yeni kritik oldu, henüz mail atılmadı
+                    }
+                } else {
+                    // Kritik seviyeden çıktıysa tarihleri sıfırla
+                    criticalSince = undefined;
+                    lastAlert = undefined;
+                }
+
+                return { 
+                    ...p, 
+                    current_stock: stock,
+                    critical_since: criticalSince,
+                    last_alert_sent_at: lastAlert
+                };
             });
         });
 
-        // 3. Update Transaction Record
+        // Update Transaction Record
         setTransactions(prevTransactions => prevTransactions.map(t => {
             if (t.id === data.id) {
                 let prevStockSnapshot = t.previous_stock;
-                
-                if (oldProductId !== newProductId) {
-                     prevStockSnapshot = newProductTarget.current_stock;
-                }
+                if (oldProductId !== newProductId) prevStockSnapshot = newProductTarget.current_stock;
                 
                 const change = data.type === TransactionType.IN ? data.quantity : -data.quantity;
                 const newStockSnapshot = prevStockSnapshot !== undefined ? prevStockSnapshot + change : undefined;
@@ -191,6 +204,34 @@ function App() {
         const change = data.type === TransactionType.IN ? data.quantity : -data.quantity;
         const newStockVal = currentStock + change;
 
+        // Critical Stock Logic for New Transaction
+        setProducts(prevProducts => prevProducts.map(p => {
+            if (p.id === data.productId) {
+                let criticalSince = p.critical_since;
+                let lastAlert = p.last_alert_sent_at;
+
+                if (newStockVal <= p.min_stock_level) {
+                    // Önceden kritik değilse veya tarih yoksa set et
+                    if (!criticalSince || p.current_stock > p.min_stock_level) {
+                        criticalSince = new Date().toISOString();
+                        lastAlert = undefined;
+                    }
+                } else {
+                    // Kritik değilse temizle
+                    criticalSince = undefined;
+                    lastAlert = undefined;
+                }
+
+                return { 
+                    ...p, 
+                    current_stock: newStockVal,
+                    critical_since: criticalSince,
+                    last_alert_sent_at: lastAlert
+                };
+            }
+            return p;
+        }));
+
         const newTransaction: Transaction = {
             id: `t-${generateId()}`,
             product_id: data.productId,
@@ -199,17 +240,10 @@ function App() {
             quantity: data.quantity,
             date: new Date().toISOString(),
             description: data.description,
-            created_by: currentUser.name, // Log the actual user name
+            created_by: currentUser.name,
             previous_stock: currentStock,
             new_stock: newStockVal
         };
-
-        setProducts(prevProducts => prevProducts.map(p => {
-            if (p.id === data.productId) {
-                return { ...p, current_stock: newStockVal };
-            }
-            return p;
-        }));
 
         setTransactions(prevTransactions => [newTransaction, ...prevTransactions]);
     }
@@ -237,7 +271,24 @@ function App() {
                       } else {
                           newStock += qty;
                       }
-                      return { ...product, current_stock: newStock };
+                      
+                      // Critical Logic Check after delete (revert)
+                      let criticalSince = product.critical_since;
+                      let lastAlert = product.last_alert_sent_at;
+                      
+                      if (newStock <= product.min_stock_level) {
+                           if (!criticalSince) criticalSince = new Date().toISOString();
+                      } else {
+                           criticalSince = undefined;
+                           lastAlert = undefined;
+                      }
+
+                      return { 
+                          ...product, 
+                          current_stock: newStock,
+                          critical_since: criticalSince,
+                          last_alert_sent_at: lastAlert
+                      };
                   }
                   return product;
               });
@@ -275,6 +326,7 @@ function App() {
             id: `p-${generateId()}`,
             ...data,
             created_at: new Date().toISOString(),
+            critical_since: data.current_stock <= data.min_stock_level ? new Date().toISOString() : undefined
         };
         setProducts(prev => [...prev, newProduct]);
     }
@@ -324,9 +376,28 @@ function App() {
                 new_stock: newStock
             });
 
+            // Update product in temp array
             updatedProducts = updatedProducts.map(p => {
                 if(p.id === item.productId) {
-                    return { ...p, current_stock: newStock };
+                    let criticalSince = p.critical_since;
+                    let lastAlert = p.last_alert_sent_at;
+
+                    if (newStock <= p.min_stock_level) {
+                        if (!criticalSince || p.current_stock > p.min_stock_level) {
+                            criticalSince = new Date().toISOString();
+                            lastAlert = undefined;
+                        }
+                    } else {
+                        criticalSince = undefined;
+                        lastAlert = undefined;
+                    }
+
+                    return { 
+                        ...p, 
+                        current_stock: newStock,
+                        critical_since: criticalSince,
+                        last_alert_sent_at: lastAlert
+                    };
                 }
                 return p;
             });
@@ -346,6 +417,7 @@ function App() {
           id: `p-${generateId()}`,
           ...p,
           created_at: new Date().toISOString(),
+          critical_since: p.current_stock <= p.min_stock_level ? new Date().toISOString() : undefined
       }));
 
       setProducts(prev => [...prev, ...newProducts]);
@@ -359,6 +431,17 @@ function App() {
     setTransactions(prev => prev.filter(t => t.product_id !== id));
     if (onSuccess) onSuccess();
   }
+
+  // YENİ: Raporlanan ürünlerin işaretlenmesi
+  const handleReportSent = (productIds: string[]) => {
+      const now = new Date().toISOString();
+      setProducts(prev => prev.map(p => {
+          if (productIds.includes(p.id)) {
+              return { ...p, last_alert_sent_at: now };
+          }
+          return p;
+      }));
+  };
 
   const openQuickAction = (type: TransactionType) => {
     setEditingTransaction(null);
@@ -387,12 +470,11 @@ function App() {
 
   const navItems = [
     { id: 'DASHBOARD', label: 'Özet', icon: LayoutDashboard },
-    { id: 'ANALYTICS', label: 'Analiz', icon: BarChart3 }, // Yeni Menü
+    { id: 'ANALYTICS', label: 'Analiz', icon: BarChart3 }, 
     { id: 'INVENTORY', label: 'Stok', icon: Package },
     { id: 'HISTORY', label: 'Geçmiş', icon: History },
   ];
 
-  // --- RENDER LOGIN IF NOT AUTHENTICATED ---
   if (!currentUser) {
     return <Login onLogin={handleLogin} />;
   }
@@ -408,7 +490,7 @@ function App() {
           />
       )}
 
-      {/* Desktop Sidebar (Hidden on Mobile) */}
+      {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 h-screen sticky top-0 transition-colors duration-300">
         <div className="p-6 border-b border-slate-100 dark:border-slate-700">
             <h1 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
@@ -474,7 +556,7 @@ function App() {
         </div>
       </aside>
 
-      {/* Mobile Top Bar (Simplified) */}
+      {/* Mobile Top Bar */}
       <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 flex justify-between items-center transition-colors duration-300">
          <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2">
             <Package className="fill-blue-600 text-white" size={24} />
@@ -491,7 +573,6 @@ function App() {
       {/* Main Content Area */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto h-auto min-h-[calc(100vh-140px)] md:h-screen pb-24 md:pb-8">
         <div className="max-w-5xl mx-auto">
-            {/* View Title */}
             <div className="mb-6 flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
                     {currentView === 'DASHBOARD' && 'Genel Bakış'}
@@ -528,6 +609,7 @@ function App() {
                     onViewNegativeStock={() => setCurrentView('NEGATIVE_STOCK')}
                     onOrderSimulation={() => setIsOrderSimModalOpen(true)}
                     onScan={handleGlobalScanClick}
+                    onReportSent={handleReportSent}
                     currentUser={currentUser}
                 />
             )}
@@ -565,11 +647,9 @@ function App() {
         </div>
       </main>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      {/* MOBILE BOTTOM NAVIGATION */}
       <div className="md:hidden fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 pb-safe">
         <div className="flex justify-around items-center h-16 px-2 relative">
-            
-            {/* Dashboard Tab */}
             <button 
                 onClick={() => setCurrentView('DASHBOARD')}
                 className={`flex flex-col items-center justify-center w-14 space-y-1 ${currentView === 'DASHBOARD' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
@@ -578,7 +658,6 @@ function App() {
                 <span className="text-[9px] font-medium">Özet</span>
             </button>
 
-            {/* Inventory Tab */}
             <button 
                 onClick={() => setCurrentView('INVENTORY')}
                 className={`flex flex-col items-center justify-center w-14 space-y-1 ${currentView === 'INVENTORY' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
@@ -587,7 +666,6 @@ function App() {
                 <span className="text-[9px] font-medium">Stok</span>
             </button>
 
-            {/* CENTRAL FLOATING SCAN BUTTON - ONLY ADMIN */}
             <div className="relative -top-6">
                 <button 
                     onClick={handleGlobalScanClick}
@@ -598,7 +676,6 @@ function App() {
                 </button>
             </div>
 
-            {/* Analytics Tab (NEW) */}
             <button 
                 onClick={() => setCurrentView('ANALYTICS')}
                 className={`flex flex-col items-center justify-center w-14 space-y-1 ${currentView === 'ANALYTICS' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
@@ -607,7 +684,6 @@ function App() {
                 <span className="text-[9px] font-medium">Analiz</span>
             </button>
 
-            {/* History Tab */}
             <button 
                 onClick={() => setCurrentView('HISTORY')}
                 className={`flex flex-col items-center justify-center w-14 space-y-1 ${currentView === 'HISTORY' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
@@ -618,7 +694,7 @@ function App() {
         </div>
       </div>
 
-      {/* Modals - Conditional rendering or logic inside ensures security */}
+      {/* Modals */}
       {currentUser.role === 'ADMIN' && (
         <>
             <TransactionModal 

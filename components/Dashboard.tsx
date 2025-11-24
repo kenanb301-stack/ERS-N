@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, BarChart3, FileSpreadsheet, Download, ShieldAlert, ClipboardCheck, Mail, ScanLine } from 'lucide-react';
+import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, BarChart3, FileSpreadsheet, Download, ShieldAlert, ClipboardCheck, Mail, ScanLine, Clock, Check, RefreshCw } from 'lucide-react';
 import { Product, Transaction, TransactionType, User } from '../types';
 
 interface DashboardProps {
@@ -12,17 +12,16 @@ interface DashboardProps {
   onViewNegativeStock: () => void;
   onOrderSimulation: () => void;
   onScan: () => void;
+  onReportSent: (productIds: string[]) => void;
   currentUser: User;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation, onScan, currentUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation, onScan, onReportSent, currentUser }) => {
   const totalProducts = products.length;
-  const totalStock = products.reduce((acc, p) => acc + p.current_stock, 0);
   
   const lowStockProducts = products.filter(p => p.current_stock <= p.min_stock_level && p.current_stock >= 0);
   const negativeStockProducts = products.filter(p => p.current_stock < 0);
   
-  // Calculate monthly stats (mock logic for demo)
   const transactionsThisMonth = transactions.filter(t => {
     const d = new Date(t.date);
     const now = new Date();
@@ -32,13 +31,13 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
   const handleExportCriticalStock = () => {
     if (lowStockProducts.length === 0) return;
 
-    // Kategori kaldırıldı
-    const headers = ["Ürün Adı", "Mevcut Stok", "Birim", "Min. Seviye"];
+    const headers = ["Ürün Adı", "Mevcut Stok", "Birim", "Min. Seviye", "Durum"];
     const rows = lowStockProducts.map(p => [
-        `"${p.product_name}"`, // Comma protection
+        `"${p.product_name}"`,
         p.current_stock.toString(),
         p.unit,
-        p.min_stock_level.toString()
+        p.min_stock_level.toString(),
+        p.last_alert_sent_at ? "Raporlandı" : "Raporlanmadı"
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
@@ -55,18 +54,48 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
   };
 
   const handleEmailReport = () => {
-      if (lowStockProducts.length === 0) return;
+      // Sadece HENÜZ RAPORLANMAMIŞ kritik ürünleri filtrele
+      const unreportedCriticals = lowStockProducts.filter(p => !p.last_alert_sent_at);
       
-      const subject = "Kritik Stok Raporu";
-      const date = new Date().toLocaleDateString('tr-TR');
-      let body = `Tarih: ${date}%0D%0A`;
-      body += `Aşağıdaki ürünler kritik stok seviyesinin altındadır:%0D%0A%0D%0A`;
+      if (unreportedCriticals.length === 0) {
+          if (!confirm("Tüm kritik ürünler için zaten rapor oluşturulmuş. Yine de tüm listeyi tekrar göndermek ister misiniz?")) {
+              return;
+          }
+      }
+
+      // Kullanıcı "Evet" derse veya yeni ürünler varsa listeyi hazırla
+      const productsToReport = unreportedCriticals.length > 0 ? unreportedCriticals : lowStockProducts;
+
+      const subject = `Kritik Stok Raporu - ${new Date().toLocaleDateString('tr-TR')}`;
+      let body = `Tarih: ${new Date().toLocaleString('tr-TR')}%0D%0A`;
+      body += `Aşağıdaki ürünler kritik stok seviyesinin altındadır ve sipariş edilmesi önerilir:%0D%0A%0D%0A`;
       
-      lowStockProducts.forEach(p => {
-          body += `- ${p.product_name}: ${p.current_stock} ${p.unit} (Min: ${p.min_stock_level})%0D%0A`;
+      productsToReport.forEach(p => {
+          body += `- ${p.product_name} (${p.part_code || 'Kodsuz'}): ${p.current_stock} ${p.unit} (Min: ${p.min_stock_level})%0D%0A`;
       });
+
+      // State'i güncelle: Bu ürünleri "Raporlandı" olarak işaretle
+      // setTimeout kullanarak mail penceresi açıldıktan hemen sonra state'i güncelliyoruz
+      setTimeout(() => {
+          onReportSent(productsToReport.map(p => p.id));
+      }, 500);
       
       window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  // Zaman farkını hesaplayan yardımcı fonksiyon
+  const getTimeDifference = (dateString?: string) => {
+    if (!dateString) return "Yeni";
+    const start = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - start.getTime();
+    
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 0) return `${diffDays} gün önce`;
+    if (diffHours > 0) return `${diffHours} saat önce`;
+    return "Az önce";
   };
 
   return (
@@ -213,7 +242,12 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden transition-colors">
           <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-amber-50/50 dark:bg-amber-900/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-                <AlertTriangle size={18} className="text-amber-600 dark:text-amber-500" />
+                <div className="relative">
+                  <AlertTriangle size={18} className="text-amber-600 dark:text-amber-500" />
+                  {lowStockProducts.filter(p => !p.last_alert_sent_at).length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse"></span>
+                  )}
+                </div>
                 <h3 className="font-bold text-slate-800 dark:text-slate-200">Kritik Seviyedeki Ürünler</h3>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
@@ -222,7 +256,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
                     className="flex-1 sm:flex-none flex items-center justify-center gap-1 text-xs font-bold text-blue-700 dark:text-blue-400 bg-white dark:bg-slate-700 border border-blue-200 dark:border-slate-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors shadow-sm"
                 >
                     <Mail size={14} />
-                    E-Posta
+                    {lowStockProducts.some(p => !p.last_alert_sent_at) ? 'Yeni Rapor (E-Posta)' : 'E-Posta (Tümü)'}
                 </button>
                 <button 
                     onClick={handleExportCriticalStock}
@@ -235,11 +269,37 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
           </div>
           <div className="divide-y divide-slate-50 dark:divide-slate-700">
             {lowStockProducts.map(product => (
-              <div key={product.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex justify-between items-center">
-                <div>
-                  <div className="font-medium text-slate-800 dark:text-white">{product.product_name}</div>
-                  {/* Kategori gösterimi kaldırıldı */}
-                  <div className="text-sm text-slate-400 dark:text-slate-500">{product.part_code || 'Kodsuz'}</div>
+              <div key={product.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex justify-between items-center relative overflow-hidden group">
+                {/* Sol Kenar Çizgisi: Raporlandıysa yeşil, değilse kırmızı */}
+                <div className={`absolute left-0 top-0 bottom-0 w-1 ${product.last_alert_sent_at ? 'bg-emerald-400' : 'bg-red-400 animate-pulse'}`}></div>
+                
+                <div className="pl-3">
+                  <div className="font-medium text-slate-800 dark:text-white flex items-center gap-2">
+                      {product.product_name}
+                      {product.last_alert_sent_at ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                              <Check size={10} /> Raporlandı
+                          </span>
+                      ) : (
+                          <span className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                              <AlertTriangle size={10} /> Bildirilmedi
+                          </span>
+                      )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                     <span className="text-sm text-slate-400 dark:text-slate-500">{product.part_code || 'Kodsuz'}</span>
+                     
+                     {/* Süre Bilgisi */}
+                     {product.critical_since && (
+                         <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                             <Clock size={10} />
+                             {product.last_alert_sent_at 
+                                ? `Raporlanalı: ${getTimeDifference(product.last_alert_sent_at)}`
+                                : `Kritikleşeli: ${getTimeDifference(product.critical_since)}`
+                             }
+                         </span>
+                     )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <span className="block font-bold text-amber-600 dark:text-amber-500">

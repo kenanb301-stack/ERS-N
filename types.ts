@@ -16,6 +16,8 @@ export interface Product {
   current_stock: number;
   barcode?: string; // Barkod içeriği
   created_at?: string;
+  critical_since?: string; // Kritik seviyeye düştüğü tarih (ISO String)
+  last_alert_sent_at?: string; // Rapor maili gönderildiği tarih (ISO String)
 }
 
 export interface Transaction {
