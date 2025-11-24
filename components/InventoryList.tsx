@@ -1,8 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, Printer, MapPin, Hexagon } from 'lucide-react';
-import { Product } from '../types';
-import { CATEGORIES } from '../constants';
+import { Search, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, Printer, MapPin, Hexagon } from 'lucide-react';
+import { Product, User } from '../types';
 
 interface InventoryListProps {
   products: Product[];
@@ -11,11 +10,11 @@ interface InventoryListProps {
   onAddProduct: () => void;
   onBulkAdd: () => void;
   onPrintBarcodes: () => void;
+  currentUser: User;
 }
 
-const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdit, onAddProduct, onBulkAdd, onPrintBarcodes }) => {
+const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdit, onAddProduct, onBulkAdd, onPrintBarcodes, currentUser }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Tümü');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const filteredProducts = useMemo(() => {
@@ -25,10 +24,9 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
                             (product.part_code && product.part_code.toLowerCase().includes(term)) ||
                             (product.location && product.location.toLowerCase().includes(term)) ||
                             (product.barcode && product.barcode.includes(term));
-      const matchesCategory = selectedCategory === 'Tümü' || product.category === selectedCategory;
-      return matchesSearch && matchesCategory;
+      return matchesSearch;
     });
-  }, [products, searchTerm, selectedCategory]);
+  }, [products, searchTerm]);
 
   const getStockStatusColor = (current: number, min: number) => {
     if (current === 0) return 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600';
@@ -51,18 +49,22 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
             >
                 <Printer size={20} />
             </button>
-            <button 
-                onClick={onBulkAdd}
-                className="bg-green-600 text-white p-2 rounded-lg shadow-md active:scale-95 transition-transform"
-            >
-                <FileSpreadsheet size={20} />
-            </button>
-            <button 
-                onClick={onAddProduct}
-                className="bg-blue-600 text-white p-2 rounded-lg shadow-md active:scale-95 transition-transform"
-            >
-                <Plus size={20} />
-            </button>
+            {currentUser.role === 'ADMIN' && (
+                <>
+                    <button 
+                        onClick={onBulkAdd}
+                        className="bg-green-600 text-white p-2 rounded-lg shadow-md active:scale-95 transition-transform"
+                    >
+                        <FileSpreadsheet size={20} />
+                    </button>
+                    <button 
+                        onClick={onAddProduct}
+                        className="bg-blue-600 text-white p-2 rounded-lg shadow-md active:scale-95 transition-transform"
+                    >
+                        <Plus size={20} />
+                    </button>
+                </>
+            )}
           </div>
       </div>
 
@@ -78,17 +80,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
           />
         </div>
-        <div className="relative">
-          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full pl-10 pr-8 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none appearance-none"
-          >
-            <option value="Tümü">Tüm Kategoriler</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
+        
         <button
             onClick={onPrintBarcodes}
             className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg transition-colors font-medium border border-slate-200 dark:border-slate-600"
@@ -104,15 +96,17 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
           <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
             <Package className="mx-auto text-slate-300 dark:text-slate-600 mb-2" size={48} />
             <p className="text-slate-500 dark:text-slate-400">Kayıtlı parça/ürün bulunamadı.</p>
-            <div className="flex justify-center gap-3 mt-4">
-                <button onClick={onAddProduct} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
-                    Yeni Parça Ekle
-                </button>
-                <span className="text-slate-300 dark:text-slate-600">|</span>
-                <button onClick={onBulkAdd} className="text-green-600 dark:text-green-400 font-medium hover:underline">
-                    Excel ile Yükle
-                </button>
-            </div>
+            {currentUser.role === 'ADMIN' && (
+                <div className="flex justify-center gap-3 mt-4">
+                    <button onClick={onAddProduct} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
+                        Yeni Parça Ekle
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-600">|</span>
+                    <button onClick={onBulkAdd} className="text-green-600 dark:text-green-400 font-medium hover:underline">
+                        Excel ile Yükle
+                    </button>
+                </div>
+            )}
           </div>
         ) : (
           filteredProducts.map(product => (
@@ -157,10 +151,6 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
                                     <span className="line-clamp-1">{product.material}</span>
                                 </div>
                             )}
-
-                            <span className="text-xs px-2 py-0.5 bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600 rounded text-slate-500">
-                                {product.category}
-                            </span>
                         </div>
                     </div>
                 </div>
@@ -175,57 +165,59 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
                     <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">Min: {product.min_stock_level}</div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                    <button 
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEdit(product);
-                        }}
-                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 rounded-lg transition-colors relative z-10"
-                        title="Düzenle"
-                    >
-                        <Edit size={18} />
-                    </button>
-                    
-                    {deleteConfirmId === product.id ? (
-                        <div className="flex items-center gap-1 animate-fade-in">
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDelete(product.id);
-                                    setDeleteConfirmId(null);
-                                }}
-                                className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm"
-                                title="Silmeyi Onayla"
-                            >
-                                <Check size={18} />
-                            </button>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDeleteConfirmId(null);
-                                }}
-                                className="p-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
-                                title="İptal"
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-                    ) : (
+                {currentUser.role === 'ADMIN' && (
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                         <button 
                             type="button"
                             onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteConfirmId(product.id);
+                            e.stopPropagation();
+                            onEdit(product);
                             }}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-colors relative z-10"
-                            title="Sil"
+                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 rounded-lg transition-colors relative z-10"
+                            title="Düzenle"
                         >
-                            <Trash2 size={18} />
+                            <Edit size={18} />
                         </button>
-                    )}
-                </div>
+                        
+                        {deleteConfirmId === product.id ? (
+                            <div className="flex items-center gap-1 animate-fade-in">
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onDelete(product.id);
+                                        setDeleteConfirmId(null);
+                                    }}
+                                    className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm"
+                                    title="Silmeyi Onayla"
+                                >
+                                    <Check size={18} />
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteConfirmId(null);
+                                    }}
+                                    className="p-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                                    title="İptal"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        ) : (
+                            <button 
+                                type="button"
+                                onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteConfirmId(product.id);
+                                }}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-colors relative z-10"
+                                title="Sil"
+                            >
+                                <Trash2 size={18} />
+                            </button>
+                        )}
+                    </div>
+                )}
               </div>
             </div>
           ))

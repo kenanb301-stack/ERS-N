@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { AlertTriangle, ArrowLeft, Download, PackageX } from 'lucide-react';
 import { Product } from '../types';
@@ -13,10 +14,10 @@ const NegativeStockList: React.FC<NegativeStockListProps> = ({ products, onBack 
   const handleExport = () => {
     if (negativeProducts.length === 0) return;
 
-    const headers = ["Ürün Adı", "Kategori", "Mevcut Stok (Eksi)", "Birim", "Min. Stok"];
+    // Kategori kaldırıldı
+    const headers = ["Ürün Adı", "Mevcut Stok (Eksi)", "Birim", "Min. Stok"];
     const rows = negativeProducts.map(p => [
         `"${p.product_name}"`,
-        p.category,
         p.current_stock.toString(),
         p.unit,
         p.min_stock_level.toString()
@@ -77,7 +78,8 @@ const NegativeStockList: React.FC<NegativeStockListProps> = ({ products, onBack 
                 <div key={product.id} className="p-4 hover:bg-red-50/10 dark:hover:bg-red-900/10 transition-colors flex justify-between items-center">
                     <div>
                     <div className="font-medium text-slate-800 dark:text-white">{product.product_name}</div>
-                    <div className="text-sm text-slate-500 dark:text-slate-400">{product.category}</div>
+                    {/* Kategori kaldırıldı */}
+                    <div className="text-sm text-slate-400 dark:text-slate-500">{product.part_code}</div>
                     </div>
                     <div className="text-right">
                     <span className="block font-bold text-red-600 dark:text-red-500 text-lg">

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, QrCode, MapPin, Hexagon, Hash } from 'lucide-react';
-import { CATEGORIES, UNITS } from '../constants';
+import { UNITS } from '../constants';
 import { Product } from '../types';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -18,7 +18,6 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
   const [partCode, setPartCode] = useState('');
   const [location, setLocation] = useState('');
   const [material, setMaterial] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[0]);
   const [unit, setUnit] = useState(UNITS[0]);
   const [minStock, setMinStock] = useState<number>(10);
   const [initialStock, setInitialStock] = useState<number>(0);
@@ -35,7 +34,6 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
         setPartCode(productToEdit.part_code || '');
         setLocation(productToEdit.location || '');
         setMaterial(productToEdit.material || '');
-        setCategory(productToEdit.category);
         setUnit(productToEdit.unit);
         setMinStock(productToEdit.min_stock_level);
         setInitialStock(productToEdit.current_stock);
@@ -46,7 +44,6 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
         setPartCode('');
         setLocation('');
         setMaterial('');
-        setCategory(CATEGORIES[0]);
         setUnit(UNITS[0]);
         setMinStock(10);
         setInitialStock(0);
@@ -71,7 +68,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
       part_code: partCode.trim(),
       location: location.trim(),
       material: material.trim(),
-      category,
+      category: 'Genel', // Kategori kaldırıldığı için varsayılan değer
       unit,
       min_stock_level: Number(minStock),
       current_stock: Number(initialStock),
@@ -182,28 +179,16 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
                 </div>
             </div>
 
-            {/* Kategori ve Birim */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Kategori</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
-                >
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Birim</label>
-                <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                  className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
-                >
-                  {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
-              </div>
+            {/* Birim */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Birim</label>
+              <select
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+              >
+                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
             </div>
 
             {/* Stok ve Kritik Seviye */}

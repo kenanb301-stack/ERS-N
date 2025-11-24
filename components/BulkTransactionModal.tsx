@@ -1,8 +1,9 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Download, PackagePlus, ArrowRightLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, TransactionType } from '../types';
-import { CATEGORIES, UNITS } from '../constants';
+import { UNITS } from '../constants';
 
 type BulkMode = 'TRANSACTION' | 'PRODUCT';
 
@@ -97,9 +98,10 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
         ];
         filename = "sablon_stok_hareketi_parcakodlu.xlsx";
     } else {
+        // Kategori kaldırıldı
         data = [
-            { "ParcaKodu": "P-00003", "Aciklama": "BASKI LAMASI", "Reyon": "B1-06-06", "Hammadde": "ST37", "Birim": "Adet", "KritikStok": 5, "BaslangicStogu": 3, "Kategori": "Yedek Parça" },
-            { "ParcaKodu": "H-20402", "Aciklama": "PISTON MILI", "Reyon": "A2-12-01", "Hammadde": "CK45", "Birim": "Adet", "KritikStok": 2, "BaslangicStogu": 10, "Kategori": "Hidrolik" }
+            { "ParcaKodu": "P-00003", "Aciklama": "BASKI LAMASI", "Reyon": "B1-06-06", "Hammadde": "ST37", "Birim": "Adet", "KritikStok": 5, "BaslangicStogu": 3 },
+            { "ParcaKodu": "H-20402", "Aciklama": "PISTON MILI", "Reyon": "A2-12-01", "Hammadde": "CK45", "Birim": "Adet", "KritikStok": 2, "BaslangicStogu": 10 }
         ];
         filename = "sablon_yeni_parcalar.xlsx";
     }
@@ -172,7 +174,7 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
         const name = row['Aciklama'] || row['UrunAdi'] || row['Ürün Adı'];
         const location = row['Reyon'] || row['Raf'] || '';
         const material = row['Hammadde'] || row['Materyal'] || '';
-        const category = row['Kategori'] || CATEGORIES[0];
+        const category = 'Genel'; // Kategori kaldırıldığı için sabit değer
         const unit = row['Birim'] || UNITS[0];
         const minStock = row['KritikStok'] || 10;
         const startStock = row['BaslangicStogu'] || 0;

@@ -1,14 +1,16 @@
+
 import React, { useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Download, Calendar, Search, Edit2, ArrowRight, Trash2, Filter, RotateCcw, Clock } from 'lucide-react';
-import { Transaction, TransactionType } from '../types';
+import { Transaction, TransactionType, User } from '../types';
 
 interface TransactionHistoryProps {
   transactions: Transaction[];
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: string) => void;
+  currentUser: User;
 }
 
-const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, onEdit, onDelete }) => {
+const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, onEdit, onDelete, currentUser }) => {
   const [filterType, setFilterType] = useState<'ALL' | 'IN' | 'OUT'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -304,30 +306,32 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, o
                   )}
               </div>
               
-              <div className="flex items-center gap-1">
-                <button 
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit(t);
-                    }}
-                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
-                    title="İşlemi Düzenle"
-                >
-                    <Edit2 size={18} />
-                </button>
-                <button 
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteClick(t.id);
-                    }}
-                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
-                    title="İşlemi Sil"
-                >
-                    <Trash2 size={18} />
-                </button>
-              </div>
+              {currentUser.role === 'ADMIN' && (
+                <div className="flex items-center gap-1">
+                    <button 
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit(t);
+                        }}
+                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
+                        title="İşlemi Düzenle"
+                    >
+                        <Edit2 size={18} />
+                    </button>
+                    <button 
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(t.id);
+                        }}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-colors active:scale-95 cursor-pointer"
+                        title="İşlemi Sil"
+                    >
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+              )}
             </div>
           </div>
         ))}

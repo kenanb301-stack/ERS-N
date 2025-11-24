@@ -39,3 +39,11 @@ export interface TransactionFormData {
   quantity: number;
   description: string;
 }
+
+export type UserRole = 'ADMIN' | 'VIEWER';
+
+export interface User {
+  username: string;
+  name: string;
+  role: UserRole;
+}

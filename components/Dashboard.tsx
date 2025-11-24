@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, BarChart3, FileSpreadsheet, Download, ShieldAlert, ClipboardCheck, Mail, ScanLine } from 'lucide-react';
-import { Product, Transaction, TransactionType } from '../types';
+import { Product, Transaction, TransactionType, User } from '../types';
 
 interface DashboardProps {
   products: Product[];
@@ -11,9 +12,10 @@ interface DashboardProps {
   onViewNegativeStock: () => void;
   onOrderSimulation: () => void;
   onScan: () => void;
+  currentUser: User;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation, onScan }) => {
+const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation, onScan, currentUser }) => {
   const totalProducts = products.length;
   const totalStock = products.reduce((acc, p) => acc + p.current_stock, 0);
   
@@ -30,10 +32,10 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
   const handleExportCriticalStock = () => {
     if (lowStockProducts.length === 0) return;
 
-    const headers = ["Ürün Adı", "Kategori", "Mevcut Stok", "Birim", "Min. Seviye"];
+    // Kategori kaldırıldı
+    const headers = ["Ürün Adı", "Mevcut Stok", "Birim", "Min. Seviye"];
     const rows = lowStockProducts.map(p => [
         `"${p.product_name}"`, // Comma protection
-        p.category,
         p.current_stock.toString(),
         p.unit,
         p.min_stock_level.toString()
@@ -135,56 +137,76 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Hızlı İşlemler</h3>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
-        
-        {/* BIG SCAN BUTTON */}
-        <button 
-          onClick={onScan}
-          className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center p-4 bg-blue-600 active:bg-blue-700 text-white rounded-2xl shadow-lg shadow-blue-200 dark:shadow-none transition-transform transform active:scale-95"
-        >
-          <ScanLine size={32} className="mb-2" />
-          <span className="font-bold text-sm">QR TARA</span>
-          <span className="text-[10px] opacity-80">Hızlı İşlem</span>
-        </button>
+      {/* Quick Actions (ONLY ADMIN) */}
+      {currentUser.role === 'ADMIN' && (
+        <>
+          <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Hızlı İşlemler</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
+            
+            {/* BIG SCAN BUTTON */}
+            <button 
+              onClick={onScan}
+              className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center p-4 bg-blue-600 active:bg-blue-700 text-white rounded-2xl shadow-lg shadow-blue-200 dark:shadow-none transition-transform transform active:scale-95"
+            >
+              <ScanLine size={32} className="mb-2" />
+              <span className="font-bold text-sm">QR TARA</span>
+              <span className="text-[10px] opacity-80">Hızlı İşlem</span>
+            </button>
 
-        <button 
-          onClick={() => onQuickAction(TransactionType.IN)}
-          className="flex flex-col items-center justify-center p-4 bg-emerald-600 active:bg-emerald-700 text-white rounded-2xl shadow-lg shadow-emerald-200 dark:shadow-none transition-transform transform active:scale-95"
-        >
-          <ArrowDownLeft size={24} className="mb-1" />
-          <span className="font-bold text-sm">GİRİŞ</span>
-          <span className="text-[10px] opacity-80 hidden md:block">Mal kabulü</span>
-        </button>
+            <button 
+              onClick={() => onQuickAction(TransactionType.IN)}
+              className="flex flex-col items-center justify-center p-4 bg-emerald-600 active:bg-emerald-700 text-white rounded-2xl shadow-lg shadow-emerald-200 dark:shadow-none transition-transform transform active:scale-95"
+            >
+              <ArrowDownLeft size={24} className="mb-1" />
+              <span className="font-bold text-sm">GİRİŞ</span>
+              <span className="text-[10px] opacity-80 hidden md:block">Mal kabulü</span>
+            </button>
 
-        <button 
-          onClick={() => onQuickAction(TransactionType.OUT)}
-          className="flex flex-col items-center justify-center p-4 bg-rose-600 active:bg-rose-700 text-white rounded-2xl shadow-lg shadow-rose-200 dark:shadow-none transition-transform transform active:scale-95"
-        >
-          <ArrowUpRight size={24} className="mb-1" />
-          <span className="font-bold text-sm">ÇIKIŞ</span>
-          <span className="text-[10px] opacity-80 hidden md:block">Sevkiyat</span>
-        </button>
+            <button 
+              onClick={() => onQuickAction(TransactionType.OUT)}
+              className="flex flex-col items-center justify-center p-4 bg-rose-600 active:bg-rose-700 text-white rounded-2xl shadow-lg shadow-rose-200 dark:shadow-none transition-transform transform active:scale-95"
+            >
+              <ArrowUpRight size={24} className="mb-1" />
+              <span className="font-bold text-sm">ÇIKIŞ</span>
+              <span className="text-[10px] opacity-80 hidden md:block">Sevkiyat</span>
+            </button>
 
-        <button 
-          onClick={onOrderSimulation}
-          className="flex flex-col items-center justify-center p-4 bg-orange-500 active:bg-orange-600 text-white rounded-2xl shadow-lg shadow-orange-200 dark:shadow-none transition-transform transform active:scale-95"
-        >
-          <ClipboardCheck size={24} className="mb-1" />
-          <span className="font-bold text-sm text-center">SİPARİŞ KONTROL</span>
-          <span className="text-[10px] opacity-80 hidden md:block">Stok Yeterlilik</span>
-        </button>
+            <button 
+              onClick={onOrderSimulation}
+              className="flex flex-col items-center justify-center p-4 bg-orange-500 active:bg-orange-600 text-white rounded-2xl shadow-lg shadow-orange-200 dark:shadow-none transition-transform transform active:scale-95"
+            >
+              <ClipboardCheck size={24} className="mb-1" />
+              <span className="font-bold text-sm text-center">SİPARİŞ KONTROL</span>
+              <span className="text-[10px] opacity-80 hidden md:block">Stok Yeterlilik</span>
+            </button>
 
-        <button 
-          onClick={onBulkAction}
-          className="hidden sm:flex flex-col items-center justify-center p-4 bg-slate-700 active:bg-slate-800 text-white rounded-2xl shadow-lg shadow-slate-300 dark:shadow-none transition-transform transform active:scale-95"
-        >
-          <FileSpreadsheet size={24} className="mb-1" />
-          <span className="font-bold text-sm">EXCEL</span>
-          <span className="text-[10px] opacity-80 hidden md:block">Toplu İşlem</span>
-        </button>
-      </div>
+            <button 
+              onClick={onBulkAction}
+              className="hidden sm:flex flex-col items-center justify-center p-4 bg-slate-700 active:bg-slate-800 text-white rounded-2xl shadow-lg shadow-slate-300 dark:shadow-none transition-transform transform active:scale-95"
+            >
+              <FileSpreadsheet size={24} className="mb-1" />
+              <span className="font-bold text-sm">EXCEL</span>
+              <span className="text-[10px] opacity-80 hidden md:block">Toplu İşlem</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Sipariş Kontrol Button for Viewers */}
+      {currentUser.role === 'VIEWER' && (
+        <div className="grid grid-cols-1 gap-4">
+             <button 
+              onClick={onOrderSimulation}
+              className="flex items-center justify-center gap-3 p-4 bg-orange-500 active:bg-orange-600 text-white rounded-2xl shadow-lg shadow-orange-200 dark:shadow-none transition-transform transform active:scale-95"
+            >
+              <ClipboardCheck size={24} />
+              <div className="text-left">
+                  <span className="block font-bold text-sm">SİPARİŞ KONTROL SİMÜLASYONU</span>
+                  <span className="text-[10px] opacity-80">Stok düşmeden yeterlilik kontrolü yapın</span>
+              </div>
+            </button>
+        </div>
+      )}
 
       {/* Low Stock Alert List */}
       {lowStockProducts.length > 0 && (
@@ -216,7 +238,8 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
               <div key={product.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors flex justify-between items-center">
                 <div>
                   <div className="font-medium text-slate-800 dark:text-white">{product.product_name}</div>
-                  <div className="text-sm text-slate-500 dark:text-slate-400">{product.category}</div>
+                  {/* Kategori gösterimi kaldırıldı */}
+                  <div className="text-sm text-slate-400 dark:text-slate-500">{product.part_code || 'Kodsuz'}</div>
                 </div>
                 <div className="text-right">
                   <span className="block font-bold text-amber-600 dark:text-amber-500">

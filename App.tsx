@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, QrCode } from 'lucide-react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, QrCode, LogOut } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -10,13 +11,20 @@ import NegativeStockList from './components/NegativeStockList';
 import OrderSimulatorModal from './components/OrderSimulatorModal';
 import BarcodePrinterModal from './components/BarcodePrinterModal';
 import BarcodeScanner from './components/BarcodeScanner';
+import Login from './components/Login';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
-import { Product, Transaction, TransactionType, ViewState } from './types';
+import { Product, Transaction, TransactionType, ViewState, User } from './types';
 
 // Utility to generate simple ID
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
 function App() {
+  // --- AUTH STATE ---
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const savedUser = localStorage.getItem('depopro_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+
   // State Management with LocalStorage persistence
   const [products, setProducts] = useState<Product[]>(() => {
     try {
@@ -85,6 +93,24 @@ function App() {
     localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
 
+  // Auth Effect
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('depopro_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('depopro_user');
+    }
+  }, [currentUser]);
+
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setCurrentView('DASHBOARD');
+  };
+
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   // Check for negative stock
@@ -92,6 +118,8 @@ function App() {
 
   // 1. Transaction Logic (Create or Edit)
   const handleTransactionSubmit = (data: { id?: string; productId: string; quantity: number; description: string; type: TransactionType }) => {
+    if (currentUser?.role !== 'ADMIN') return; // Security check
+
     const newProductTarget = products.find(p => p.id === data.productId);
     if (!newProductTarget) return;
 
@@ -103,10 +131,7 @@ function App() {
         const oldProductId = oldTransaction.product_id;
         const newProductId = data.productId;
 
-        // Calculate logic:
-        // 1. Revert Old Transaction (on Old Product)
-        // 2. Apply New Transaction (on New Product)
-        
+        // Calculate logic...
         setProducts(prevProducts => {
             return prevProducts.map(p => {
                 let stock = p.current_stock;
@@ -121,7 +146,6 @@ function App() {
                 }
 
                 // Step 2: Apply New Transaction Effect
-                // Note: If oldProductId === newProductId, this runs sequentially on the same 'stock' variable
                 if (p.id === newProductId) {
                      if (data.type === TransactionType.IN) {
                          stock += data.quantity; // Apply IN: add
@@ -137,24 +161,19 @@ function App() {
         // 3. Update Transaction Record
         setTransactions(prevTransactions => prevTransactions.map(t => {
             if (t.id === data.id) {
-                // Calculate stock snapshots for history
-                // If product changed, we can't easily know the historical 'previous_stock' of the new product without replay.
-                // We will use the current stock of the target product as 'previous' (best effort for edit) or preserve old if product same.
                 let prevStockSnapshot = t.previous_stock;
                 
                 if (oldProductId !== newProductId) {
-                     // Product changed, use current stock of new product as base
                      prevStockSnapshot = newProductTarget.current_stock;
                 }
                 
-                // If previous stock is available, calculate new stock based on the change
                 const change = data.type === TransactionType.IN ? data.quantity : -data.quantity;
                 const newStockSnapshot = prevStockSnapshot !== undefined ? prevStockSnapshot + change : undefined;
 
                 return {
                     ...t,
                     product_id: newProductId,
-                    product_name: newProductTarget.product_name, // Update name in case product changed
+                    product_name: newProductTarget.product_name,
                     type: data.type,
                     quantity: data.quantity,
                     description: data.description,
@@ -167,7 +186,6 @@ function App() {
 
     } else {
         // CREATE NEW TRANSACTION
-        // Capture snapshots before update
         const currentStock = newProductTarget.current_stock;
         const change = data.type === TransactionType.IN ? data.quantity : -data.quantity;
         const newStockVal = currentStock + change;
@@ -180,7 +198,7 @@ function App() {
             quantity: data.quantity,
             date: new Date().toISOString(),
             description: data.description,
-            created_by: 'Mevcut Kullanıcı',
+            created_by: currentUser.name, // Log the actual user name
             previous_stock: currentStock,
             new_stock: newStockVal
         };
@@ -200,6 +218,8 @@ function App() {
   };
 
   const handleDeleteTransaction = (id: string, onSuccess?: () => void) => {
+      if (currentUser?.role !== 'ADMIN') return;
+
       const transactionToDelete = transactions.find(t => t.id === id);
 
       if (transactionToDelete) {
@@ -239,6 +259,8 @@ function App() {
 
   // 2. Product Create & Edit Logic
   const handleSaveProduct = (data: any) => {
+    if (currentUser?.role !== 'ADMIN') return;
+
     if (editingProduct) {
         // Edit Existing
         const { current_stock, ...updateData } = data;
@@ -272,6 +294,8 @@ function App() {
 
   // 3. Bulk Operations Logic
   const handleBulkTransactionProcess = (newTransactionsData: any[]) => {
+    if (currentUser?.role !== 'ADMIN') return;
+
     const newTxIds: Transaction[] = [];
     
     setProducts(prevProducts => {
@@ -294,7 +318,7 @@ function App() {
                 quantity: item.quantity,
                 date: new Date().toISOString(),
                 description: item.description || 'Toplu Excel İşlemi',
-                created_by: 'Excel Import',
+                created_by: `${currentUser.name} (Excel)`,
                 previous_stock: previousStock,
                 new_stock: newStock
             });
@@ -315,6 +339,8 @@ function App() {
   };
 
   const handleBulkProductProcess = (newProductsData: any[]) => {
+      if (currentUser?.role !== 'ADMIN') return;
+
       const newProducts: Product[] = newProductsData.map(p => ({
           id: `p-${generateId()}`,
           ...p,
@@ -327,6 +353,7 @@ function App() {
   };
 
   const handleDeleteProduct = (id: string, onSuccess?: () => void) => {
+    if (currentUser?.role !== 'ADMIN') return;
     setProducts(prev => prev.filter(p => p.id !== id));
     setTransactions(prev => prev.filter(t => t.product_id !== id));
     if (onSuccess) onSuccess();
@@ -351,10 +378,8 @@ function App() {
 
   const handleGlobalScanSuccess = (decodedText: string) => {
       setIsGlobalScannerOpen(false);
-      // Open transaction modal with barcode
       setEditingTransaction(null);
       setPreSelectedBarcode(decodedText);
-      // Default to IN or determine based on context? Defaulting to IN for safety.
       setModalType(TransactionType.IN);
       setIsModalOpen(true);
   };
@@ -364,6 +389,11 @@ function App() {
     { id: 'INVENTORY', label: 'Stok', icon: Package },
     { id: 'HISTORY', label: 'Geçmiş', icon: History },
   ];
+
+  // --- RENDER LOGIN IF NOT AUTHENTICATED ---
+  if (!currentUser) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row transition-colors duration-300">
@@ -414,10 +444,10 @@ function App() {
                 </button>
             )}
         </nav>
-        <div className="p-4 border-t border-slate-100 dark:border-slate-700">
+        <div className="p-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
              <button 
                 onClick={toggleDarkMode}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors mb-3 group"
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors group"
              >
                 <div className="flex items-center gap-2">
                     {isDarkMode ? <Moon size={18} className="text-purple-400" /> : <Sun size={18} className="text-amber-500" />}
@@ -429,7 +459,15 @@ function App() {
 
             <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4">
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Giriş yapan kullanıcı</p>
-                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">Depo Sorumlusu</p>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{currentUser.name}</p>
+                  <button onClick={handleLogout} className="text-red-500 hover:text-red-700" title="Çıkış Yap">
+                    <LogOut size={16} />
+                  </button>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 inline-block mt-1">
+                  {currentUser.role === 'ADMIN' ? 'Yönetici' : 'İzleyici'}
+                </span>
             </div>
         </div>
       </aside>
@@ -441,8 +479,9 @@ function App() {
             <span className="dark:text-white text-slate-800">DepoPro</span>
         </h1>
         <div className="flex items-center gap-2">
-            <button onClick={toggleDarkMode} className="p-2 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-lg">
-                {isDarkMode ? <Moon size={20} /> : <Sun size={20} />}
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300 mr-1">{currentUser.name}</span>
+            <button onClick={handleLogout} className="p-2 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                <LogOut size={18} />
             </button>
         </div>
       </div>
@@ -458,7 +497,7 @@ function App() {
                     {currentView === 'HISTORY' && 'Hareket Geçmişi'}
                     {currentView === 'NEGATIVE_STOCK' && 'Dikkat Gerektiren Ürünler'}
                 </h2>
-                {currentView === 'INVENTORY' && (
+                {currentView === 'INVENTORY' && currentUser.role === 'ADMIN' && (
                     <div className="flex gap-2">
                         <button 
                             onClick={() => openBulkModal('PRODUCT')}
@@ -486,6 +525,7 @@ function App() {
                     onViewNegativeStock={() => setCurrentView('NEGATIVE_STOCK')}
                     onOrderSimulation={() => setIsOrderSimModalOpen(true)}
                     onScan={handleGlobalScanClick}
+                    currentUser={currentUser}
                 />
             )}
             {currentView === 'INVENTORY' && (
@@ -496,6 +536,7 @@ function App() {
                     onAddProduct={handleAddProductClick}
                     onBulkAdd={() => openBulkModal('PRODUCT')}
                     onPrintBarcodes={() => setIsBarcodePrinterOpen(true)}
+                    currentUser={currentUser}
                 />
             )}
             {currentView === 'HISTORY' && (
@@ -503,6 +544,7 @@ function App() {
                     transactions={transactions} 
                     onEdit={handleEditTransactionClick}
                     onDelete={(id) => handleDeleteTransaction(id)}
+                    currentUser={currentUser}
                 />
             )}
             {currentView === 'NEGATIVE_STOCK' && (
@@ -536,11 +578,12 @@ function App() {
                 <span className="text-[10px] font-medium">Stok</span>
             </button>
 
-            {/* CENTRAL FLOATING SCAN BUTTON */}
+            {/* CENTRAL FLOATING SCAN BUTTON - ONLY ADMIN */}
             <div className="relative -top-6">
                 <button 
                     onClick={handleGlobalScanClick}
-                    className="flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-200 dark:shadow-blue-900/50 active:scale-95 transition-transform border-4 border-white dark:border-slate-800"
+                    disabled={currentUser.role !== 'ADMIN'}
+                    className={`flex items-center justify-center w-14 h-14 rounded-full shadow-lg active:scale-95 transition-transform border-4 border-white dark:border-slate-800 ${currentUser.role === 'ADMIN' ? 'bg-blue-600 text-white shadow-blue-200 dark:shadow-blue-900/50' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
                 >
                     <ScanLine size={28} />
                 </button>
@@ -571,38 +614,42 @@ function App() {
         </div>
       </div>
 
-      {/* Modals */}
-      <TransactionModal 
-        isOpen={isModalOpen}
-        onClose={() => {
-            setIsModalOpen(false);
-            setEditingTransaction(null);
-            setPreSelectedBarcode('');
-        }}
-        onSubmit={handleTransactionSubmit}
-        onDelete={(id) => handleDeleteTransaction(id, () => setIsModalOpen(false))}
-        initialType={modalType}
-        products={products}
-        transactionToEdit={editingTransaction}
-        defaultBarcode={preSelectedBarcode}
-      />
+      {/* Modals - Conditional rendering or logic inside ensures security */}
+      {currentUser.role === 'ADMIN' && (
+        <>
+            <TransactionModal 
+                isOpen={isModalOpen}
+                onClose={() => {
+                    setIsModalOpen(false);
+                    setEditingTransaction(null);
+                    setPreSelectedBarcode('');
+                }}
+                onSubmit={handleTransactionSubmit}
+                onDelete={(id) => handleDeleteTransaction(id, () => setIsModalOpen(false))}
+                initialType={modalType}
+                products={products}
+                transactionToEdit={editingTransaction}
+                defaultBarcode={preSelectedBarcode}
+            />
 
-      <ProductModal
-        isOpen={isProductModalOpen}
-        onClose={() => setIsProductModalOpen(false)}
-        onSubmit={handleSaveProduct}
-        onDelete={(id) => handleDeleteProduct(id, () => setIsProductModalOpen(false))}
-        productToEdit={editingProduct}
-      />
+            <ProductModal
+                isOpen={isProductModalOpen}
+                onClose={() => setIsProductModalOpen(false)}
+                onSubmit={handleSaveProduct}
+                onDelete={(id) => handleDeleteProduct(id, () => setIsProductModalOpen(false))}
+                productToEdit={editingProduct}
+            />
 
-      <BulkTransactionModal
-        isOpen={isBulkModalOpen}
-        onClose={() => setIsBulkModalOpen(false)}
-        onProcessTransactions={handleBulkTransactionProcess}
-        onProcessProducts={handleBulkProductProcess}
-        products={products}
-        initialMode={bulkModalMode}
-      />
+            <BulkTransactionModal
+                isOpen={isBulkModalOpen}
+                onClose={() => setIsBulkModalOpen(false)}
+                onProcessTransactions={handleBulkTransactionProcess}
+                onProcessProducts={handleBulkProductProcess}
+                products={products}
+                initialMode={bulkModalMode}
+            />
+        </>
+      )}
 
       <OrderSimulatorModal
         isOpen={isOrderSimModalOpen}
