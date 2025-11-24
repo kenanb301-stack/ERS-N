@@ -41,9 +41,9 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                             ctx?.clearRect(0, 0, canvas.width, canvas.height);
                             
                             QRCode.toCanvas(canvas, codeToUse, { 
-                                width: 128, // Daha net baskı için çözünürlük artırıldı
-                                margin: 0,
-                                errorCorrectionLevel: 'L'
+                                width: 250, // Yüksek çözünürlük
+                                margin: 1,  // Beyaz kenar boşluğunu azalttık
+                                errorCorrectionLevel: 'M'
                             }, function (error: any) {
                                 if (error) console.error(error)
                             })
@@ -112,11 +112,10 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 page-break-after: always;
                 page-break-inside: avoid;
                 position: relative;
-                padding: 2mm;
+                padding: 3mm; /* Kenar boşluğu */
                 box-sizing: border-box;
                 display: flex;
                 flex-direction: column;
-                justify-content: space-between;
                 background: white;
                 color: black;
                 overflow: hidden;
@@ -135,11 +134,10 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
             background: white;
             border: 1px solid #ddd;
             border-radius: 4px;
-            padding: 2mm;
+            padding: 3mm;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
             overflow: hidden;
         }
       `}</style>
@@ -204,35 +202,21 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                             className={`relative group cursor-pointer transition-all duration-200 ${opacityClass}`} 
                             onClick={() => toggleSelection(product.id)}
                         >
-                            {/* EKRAN İÇİN TASARIM */}
+                            {/* EKRAN İÇİN TASARIM - SADELEŞTİRİLMİŞ */}
                             <div className="label-container bg-white shadow-sm">
-                                {/* Satır 1: Parça Kodu ve Reyon */}
-                                <div className="flex justify-between items-start mb-1 border-b border-black pb-1">
-                                    <div className="font-extrabold text-lg leading-none font-mono text-black uppercase">
+                                {/* ÜST: Parça Kodu (Sol) - Reyon (Sağ) */}
+                                <div className="flex justify-between items-center mb-2 h-[12mm]">
+                                    <div className="font-mono font-black text-xl text-black uppercase leading-none">
                                         {product.part_code || product.barcode}
                                     </div>
-                                    <div className="bg-black text-white px-1.5 py-0.5 text-xs font-bold whitespace-nowrap">
+                                    <div className="border-2 border-black px-1 py-0.5 text-xs font-bold text-black uppercase whitespace-nowrap">
                                         {product.location || 'RAF YOK'}
                                     </div>
                                 </div>
                                 
-                                {/* Satır 2: İçerik Bölünmesi */}
-                                <div className="flex flex-1 gap-1 overflow-hidden">
-                                    {/* Sol: Açıklama (Küçük Yazı) */}
-                                    <div className="flex-1 flex flex-col justify-between">
-                                        <div className="text-[10px] leading-tight font-bold text-black uppercase break-words line-clamp-4">
-                                            {product.product_name}
-                                        </div>
-                                        <div className="text-[8px] text-slate-600 font-medium uppercase mt-1">
-                                            {product.material}
-                                        </div>
-                                    </div>
-
-                                    {/* Sağ: QR Kod - Ekran Önizleme */}
-                                    {/* w-[28mm] yaparak büyüttük */}
-                                    <div className="w-[28mm] flex-shrink-0 flex items-end justify-center pr-1">
-                                        <canvas id={`qr-canvas-${product.id}`} className="w-full h-auto"></canvas>
-                                    </div>
+                                {/* ALT: Sadece QR Kod (Ortalanmış) */}
+                                <div className="flex-1 flex items-center justify-center pt-1">
+                                    <canvas id={`qr-canvas-${product.id}`} className="max-h-[22mm] max-w-full"></canvas>
                                 </div>
                             </div>
 
@@ -260,41 +244,56 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
       <div id="print-area">
         {validProducts.filter(p => selectedProductIds.has(p.id)).map(product => (
             <div key={`print-${product.id}`} className="label-container">
-                {/* 1. ÜST BÖLÜM: PARÇA KODU (Sol) ve REYON (Sağ Kutu) */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid black', paddingBottom: '1mm', marginBottom: '1mm' }}>
-                    <div style={{ fontSize: '14pt', fontWeight: '900', fontFamily: 'monospace', textTransform: 'uppercase' }}>
+                {/* 1. SATIR: PARÇA KODU (Sol - Büyük) ve REYON (Sağ - Kutulu) */}
+                <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    height: '10mm',
+                    marginBottom: '2mm'
+                }}>
+                    <div style={{ 
+                        fontSize: '16pt', 
+                        fontWeight: '900', 
+                        fontFamily: 'monospace', 
+                        textTransform: 'uppercase',
+                        lineHeight: '1'
+                    }}>
                         {product.part_code || product.barcode || '-'}
                     </div>
-                    <div style={{ backgroundColor: 'black', color: 'white', padding: '1mm 2mm', fontSize: '10pt', fontWeight: 'bold' }}>
+                    <div style={{ 
+                        border: '2px solid black', 
+                        padding: '1mm 2mm', 
+                        fontSize: '11pt', 
+                        fontWeight: 'bold',
+                        whiteSpace: 'nowrap'
+                    }}>
                         {product.location || '-'}
                     </div>
                 </div>
 
-                {/* 2. ALT BÖLÜM: AÇIKLAMA (Sol) ve QR (Sağ) */}
-                <div style={{ display: 'flex', flex: 1, gap: '2mm' }}>
-                    {/* Sol taraf: Açıklama metni */}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                         <div style={{ fontSize: '9pt', fontWeight: 'bold', lineHeight: '1.1', textTransform: 'uppercase', marginBottom: 'auto' }}>
-                            {product.product_name}
-                         </div>
-                         {product.material && (
-                             <div style={{ fontSize: '7pt', marginTop: '1mm', textTransform: 'uppercase' }}>
-                                 {product.material}
-                             </div>
-                         )}
-                    </div>
-                    
-                    {/* Sağ taraf: QR Code Resmi */}
-                    {/* Width 28mm'ye çıkarıldı ve padding-right ile hafif sola çekildi */}
-                    <div style={{ width: '28mm', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingRight: '2mm' }}>
-                        <img 
-                            id={`qr-img-${product.id}`} 
-                            src={(document.getElementById(`qr-canvas-${product.id}`) as HTMLCanvasElement)?.toDataURL() || ''} 
-                            style={{ width: '100%', height: 'auto', display: 'block' }}
-                            alt="qr"
-                        />
-                    </div>
+                {/* 2. SATIR: SADECE QR KOD (Ortalanmış ve Maksimum Boyut) */}
+                <div style={{ 
+                    flex: 1, 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    padding: '1mm'
+                }}>
+                    <img 
+                        id={`qr-img-${product.id}`} 
+                        src={(document.getElementById(`qr-canvas-${product.id}`) as HTMLCanvasElement)?.toDataURL() || ''} 
+                        style={{ 
+                            height: '100%', 
+                            width: 'auto', 
+                            maxHeight: '24mm', // Etiketin kalan yüksekliğine sığdır
+                            display: 'block' 
+                        }}
+                        alt="qr"
+                    />
                 </div>
+                
+                {/* NOT: product_name ve material KODDAN SİLİNDİ */}
             </div>
         ))}
       </div>
