@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, ScanLine, MapPin, Hexagon, Hash } from 'lucide-react';
 import { UNITS } from '../constants';
@@ -67,7 +68,6 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
       part_code: partCode.trim(),
       location: location.trim(),
       material: material.trim(),
-      category: 'Genel', // Kategori kaldırıldığı için varsayılan değer
       unit,
       min_stock_level: Number(minStock),
       current_stock: Number(initialStock),

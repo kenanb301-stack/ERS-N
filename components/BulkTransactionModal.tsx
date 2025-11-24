@@ -98,7 +98,6 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
         ];
         filename = "sablon_stok_hareketi_parcakodlu.xlsx";
     } else {
-        // Kategori kaldırıldı
         data = [
             { "ParcaKodu": "P-00003", "Aciklama": "BASKI LAMASI", "Reyon": "B1-06-06", "Hammadde": "ST37", "Birim": "Adet", "KritikStok": 5, "BaslangicStogu": 3 },
             { "ParcaKodu": "H-20402", "Aciklama": "PISTON MILI", "Reyon": "A2-12-01", "Hammadde": "CK45", "Birim": "Adet", "KritikStok": 2, "BaslangicStogu": 10 }
@@ -174,7 +173,6 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
         const name = row['Aciklama'] || row['UrunAdi'] || row['Ürün Adı'];
         const location = row['Reyon'] || row['Raf'] || '';
         const material = row['Hammadde'] || row['Materyal'] || '';
-        const category = 'Genel'; // Kategori kaldırıldığı için sabit değer
         const unit = row['Birim'] || UNITS[0];
         const minStock = row['KritikStok'] || 10;
         const startStock = row['BaslangicStogu'] || 0;
@@ -196,7 +194,6 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
             location: location ? location.toString().trim() : '',
             material: material ? material.toString().trim() : '',
             barcode: partCode ? partCode.toString().trim() : '', // Auto barcode from part code
-            category: category,
             unit: unit,
             min_stock_level: Number(minStock),
             current_stock: Number(startStock)

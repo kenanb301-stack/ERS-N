@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { X, Camera, ScanLine } from 'lucide-react';
@@ -38,7 +39,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
 
       const config = {
         fps: 10,
-        qrbox: { width: 280, height: 150 }, // Dikdörtgen barkod alanı
+        qrbox: { width: 300, height: 100 }, // Barkod için geniş dikdörtgen
+        aspectRatio: 1.0, 
       };
 
       try {
@@ -153,7 +155,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
                 {!error && (
                     <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
                         {/* Scan Area Box - Rectangular for Barcode */}
-                        <div className="w-72 h-40 border-2 border-white/30 rounded-xl relative overflow-hidden bg-white/5 backdrop-blur-[1px]">
+                        <div className="w-72 h-32 border-2 border-white/30 rounded-xl relative overflow-hidden bg-white/5 backdrop-blur-[1px]">
                             {/* Scanning Line Animation */}
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-full bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-[scan-horizontal_2s_ease-in-out_infinite]"></div>
                             

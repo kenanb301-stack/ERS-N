@@ -10,11 +10,10 @@ export interface Product {
   part_code?: string;   // Örn: P-00003
   location?: string;    // Örn: B1-06-06 (Reyon)
   material?: string;    // Örn: ST37 SOĞUK ÇEKME (Hammadde)
-  category: string;
   min_stock_level: number;
   unit: string;
   current_stock: number;
-  barcode?: string; // QR kod içeriği
+  barcode?: string; // Barkod içeriği
   created_at?: string;
 }
 

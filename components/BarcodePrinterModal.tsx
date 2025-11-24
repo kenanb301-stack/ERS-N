@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { X, Printer, CheckSquare, Square, AlertCircle } from 'lucide-react';
 import { Product } from '../types';
@@ -11,6 +12,7 @@ interface BarcodePrinterModalProps {
 
 const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClose, products }) => {
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const [barcodeImages, setBarcodeImages] = useState<Record<string, string>>({});
 
   // Products that have a barcode value
   const validProducts = products.filter(p => (p.barcode && p.barcode.trim().length > 0) || (p.part_code && p.part_code.trim().length > 0));
@@ -19,21 +21,26 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
     if (isOpen) {
       // Varsayılan olarak hiçbir şeyi seçme (Kullanıcı kendi seçsin)
       setSelectedProductIds(new Set());
+      setBarcodeImages({});
     }
   }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && selectedProductIds.size > 0) {
         // Wait for DOM render
-        setTimeout(() => {
+        const timer = setTimeout(() => {
+            const newImages: Record<string, string> = {};
+            
             selectedProductIds.forEach(id => {
                 const product = validProducts.find(p => p.id === id);
                 if (product) {
                     try {
                         const codeToUse = product.barcode || product.part_code;
-                        const canvas = document.getElementById(`barcode-canvas-${id}`) as HTMLCanvasElement;
+                        const canvasId = `barcode-canvas-${id}`;
+                        const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
                         
                         if (canvas && codeToUse) {
+                            // 1. Barkodu Canvas üzerine çiz
                             JsBarcode(canvas, codeToUse, {
                                 format: "CODE128",
                                 lineColor: "#000",
@@ -44,13 +51,23 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                                 textMargin: 2,
                                 margin: 0
                             });
+
+                            // 2. Çizilen barkodu resim verisine (Base64) dönüştür ve sakla
+                            // Bu işlem yazdırma sırasında kaybolmasını önler
+                            newImages[id] = canvas.toDataURL("image/png");
                         }
                     } catch (e) {
                         console.error("Barcode generation error", e);
                     }
                 }
             });
-        }, 300);
+
+            // State'i güncelle
+            setBarcodeImages(prev => ({ ...prev, ...newImages }));
+
+        }, 100);
+
+        return () => clearTimeout(timer);
     }
   }, [isOpen, selectedProductIds, validProducts]);
 
@@ -215,7 +232,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                                     </div>
                                 </div>
                                 
-                                {/* Barkod */}
+                                {/* Barkod (Canvas) */}
                                 <div className="flex-1 flex items-center justify-center w-full overflow-hidden">
                                     <canvas id={`barcode-canvas-${product.id}`} className="max-w-full h-auto"></canvas>
                                 </div>
@@ -254,12 +271,21 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                     </span>
                 </div>
                 
+                {/* 
+                    ÖNEMLİ DÜZELTME:
+                    Doğrudan Canvas ID'si yerine State'e kaydedilen Data URL kullanılıyor.
+                    Yazdırma penceresi açıldığında Canvas render edilmese bile resim verisi hazırdır.
+                */}
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
-                    <img 
-                        src={(document.getElementById(`barcode-canvas-${product.id}`) as HTMLCanvasElement)?.toDataURL() || ''} 
-                        style={{ maxWidth: '100%', maxHeight: '25mm' }}
-                        alt="barcode"
-                    />
+                    {barcodeImages[product.id] ? (
+                         <img 
+                            src={barcodeImages[product.id]}
+                            style={{ maxWidth: '100%', maxHeight: '25mm' }}
+                            alt="barcode"
+                        />
+                    ) : (
+                        <div style={{ fontSize: '8pt' }}>Yükleniyor...</div>
+                    )}
                 </div>
             </div>
         ))}

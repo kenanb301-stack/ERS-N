@@ -8,7 +8,6 @@ export const INITIAL_PRODUCTS: Product[] = [
     part_code: 'P-00003',
     location: 'B1-06-06',
     material: 'ST37 SOĞUK ÇEKME',
-    category: 'Yedek Parça',
     min_stock_level: 5,
     unit: 'Adet',
     current_stock: 3, // Kritik seviye altı (Örnekteki miktar)
@@ -21,7 +20,6 @@ export const INITIAL_PRODUCTS: Product[] = [
     part_code: 'H-20402',
     location: 'A2-12-01',
     material: 'CK45 KROM KAPLI',
-    category: 'Hidrolik',
     min_stock_level: 2,
     unit: 'Adet',
     current_stock: 8,
@@ -34,7 +32,6 @@ export const INITIAL_PRODUCTS: Product[] = [
     part_code: 'C-1240-88',
     location: 'K4-01-05',
     material: '8.8 ÇELİK',
-    category: 'Hırdavat',
     min_stock_level: 100,
     unit: 'Adet',
     current_stock: 450,
@@ -71,4 +68,3 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
 ];
 
 export const UNITS = ['Adet', 'Metre', 'Kg', 'Litre', 'Takım', 'Paket'];
-export const CATEGORIES = ['Yedek Parça', 'Hırdavat', 'Hammadde', 'Hidrolik', 'Elektrik', 'Sarf Malzeme'];

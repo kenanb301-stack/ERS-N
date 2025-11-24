@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, QrCode, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
