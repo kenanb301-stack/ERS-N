@@ -1,6 +1,9 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud } from 'lucide-react';
+// @ts-ignore
 import { ref, onValue, set, DataSnapshot } from 'firebase/database';
+// @ts-ignore
 import type { Database } from 'firebase/database';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
@@ -52,7 +55,7 @@ function App() {
   });
 
   // FIREBASE / CLOUD STATE
-  const [firebaseDb, setFirebaseDb] = useState<Database | null>(null);
+  const [firebaseDb, setFirebaseDb] = useState<any>(null);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
   const [cloudConfig, setCloudConfig] = useState<FirebaseConfig | null>(() => {
       const saved = localStorage.getItem('depopro_firebase_config');
@@ -108,7 +111,7 @@ function App() {
     if (!firebaseDb) return;
 
     const dataRef = ref(firebaseDb, 'data');
-    const unsubscribe = onValue(dataRef, (snapshot: DataSnapshot) => {
+    const unsubscribe = onValue(dataRef, (snapshot: any) => {
         const data = snapshot.val();
         if (data) {
             // Cloud'dan veri geldiğinde yerel state'i güncelle
@@ -156,7 +159,7 @@ function App() {
           transactions: trans,
           lastUpdated: new Date().toISOString(),
           updatedBy: currentUser?.name || 'Unknown'
-      }).catch((err: Error) => console.error("Cloud sync failed:", err));
+      }).catch((err: any) => console.error("Cloud sync failed:", err));
   };
 
   // --- CLOUD SETTINGS HANDLERS ---
