@@ -1,5 +1,7 @@
 {
   "name": "Depo Stok Takip Pro",
   "description": "Mobil uyumlu, modern stok yönetim ve takip sistemi. Giriş-çıkış işlemleri, kritik stok uyarıları ve raporlama özellikleri içerir.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }
