@@ -11,9 +11,10 @@ interface TransactionModalProps {
   initialType: TransactionType;
   products: Product[];
   transactionToEdit?: Transaction | null;
+  defaultBarcode?: string;
 }
 
-const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSubmit, onDelete, initialType, products, transactionToEdit }) => {
+const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSubmit, onDelete, initialType, products, transactionToEdit, defaultBarcode }) => {
   const [type, setType] = useState<TransactionType>(initialType);
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState<number | ''>('');
@@ -28,6 +29,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Handle external default barcode (from Global Scan)
+  useEffect(() => {
+    if (isOpen && defaultBarcode) {
+        handleBarcodeSearch(defaultBarcode);
+    }
+  }, [isOpen, defaultBarcode]);
 
   useEffect(() => {
     if (isOpen) {
@@ -48,13 +56,16 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       } else {
         // Create Mode
         setType(initialType);
-        setProductId('');
-        setQuantity('');
-        setDescription('');
-        setError('');
-        setSearchTerm('');
-        setIsDropdownOpen(false);
-        setScannedBarcode('');
+        // Only reset if no default barcode is provided (handled by other effect)
+        if (!defaultBarcode) {
+            setProductId('');
+            setQuantity('');
+            setDescription('');
+            setError('');
+            setSearchTerm('');
+            setIsDropdownOpen(false);
+            setScannedBarcode('');
+        }
       }
     }
   }, [isOpen, initialType, transactionToEdit, products]);
@@ -94,11 +105,15 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
   const handleBarcodeSearch = (code: string) => {
       setScannedBarcode(code);
-      const product = products.find(p => p.barcode === code.trim());
+      // Normalize code
+      const searchCode = code.trim();
+      // Find product by barcode OR part code
+      const product = products.find(p => (p.barcode === searchCode) || (p.part_code === searchCode));
+      
       if (product) {
           handleProductSelect(product);
           // Optional: Focus quantity field here if needed
-          document.getElementById('quantityInput')?.focus();
+          setTimeout(() => document.getElementById('quantityInput')?.focus(), 100);
       } else {
           setError(`"${code}" kodlu ürün bulunamadı.`);
           setProductId('');
@@ -187,7 +202,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               </button>
             </div>
 
-            {/* Barcode Fast Scan Input */}
+            {/* Barcode Fast Scan Input (Shown only if not coming from defaultBarcode) */}
             {!transactionToEdit && (
                 <div className="flex gap-2 mb-2">
                     <input 
@@ -204,7 +219,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                             }
                         }}
                         className="flex-1 p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg focus:border-blue-500 outline-none dark:bg-slate-700 dark:text-white"
-                        autoFocus
+                        autoFocus={!defaultBarcode}
                     />
                     <button 
                         type="button" 

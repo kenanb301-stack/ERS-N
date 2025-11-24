@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer } from 'lucide-react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, QrCode } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -9,6 +9,7 @@ import BulkTransactionModal from './components/BulkTransactionModal';
 import NegativeStockList from './components/NegativeStockList';
 import OrderSimulatorModal from './components/OrderSimulatorModal';
 import BarcodePrinterModal from './components/BarcodePrinterModal';
+import BarcodeScanner from './components/BarcodeScanner';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState } from './types';
 
@@ -43,6 +44,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<TransactionType>(TransactionType.IN);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [preSelectedBarcode, setPreSelectedBarcode] = useState<string>(''); // For global scan
   
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null); 
@@ -52,6 +54,9 @@ function App() {
 
   const [isOrderSimModalOpen, setIsOrderSimModalOpen] = useState(false);
   const [isBarcodePrinterOpen, setIsBarcodePrinterOpen] = useState(false);
+
+  // Global Scanner State
+  const [isGlobalScannerOpen, setIsGlobalScannerOpen] = useState(false);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -228,6 +233,7 @@ function App() {
   const handleEditTransactionClick = (transaction: Transaction) => {
       setEditingTransaction(transaction);
       setModalType(transaction.type);
+      setPreSelectedBarcode('');
       setIsModalOpen(true);
   }
 
@@ -328,6 +334,7 @@ function App() {
 
   const openQuickAction = (type: TransactionType) => {
     setEditingTransaction(null);
+    setPreSelectedBarcode('');
     setModalType(type);
     setIsModalOpen(true);
   };
@@ -337,16 +344,39 @@ function App() {
       setIsBulkModalOpen(true);
   };
 
+  // Global Scan Handler
+  const handleGlobalScanClick = () => {
+      setIsGlobalScannerOpen(true);
+  };
+
+  const handleGlobalScanSuccess = (decodedText: string) => {
+      setIsGlobalScannerOpen(false);
+      // Open transaction modal with barcode
+      setEditingTransaction(null);
+      setPreSelectedBarcode(decodedText);
+      // Default to IN or determine based on context? Defaulting to IN for safety.
+      setModalType(TransactionType.IN);
+      setIsModalOpen(true);
+  };
+
   const navItems = [
     { id: 'DASHBOARD', label: 'Özet', icon: LayoutDashboard },
-    { id: 'INVENTORY', label: 'Stok Listesi', icon: Package },
-    { id: 'HISTORY', label: 'Hareketler', icon: History },
+    { id: 'INVENTORY', label: 'Stok', icon: Package },
+    { id: 'HISTORY', label: 'Geçmiş', icon: History },
   ];
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row transition-colors duration-300">
       
-      {/* Desktop Sidebar */}
+      {/* GLOBAL SCANNER OVERLAY */}
+      {isGlobalScannerOpen && (
+          <BarcodeScanner 
+            onScanSuccess={handleGlobalScanSuccess}
+            onClose={() => setIsGlobalScannerOpen(false)}
+          />
+      )}
+
+      {/* Desktop Sidebar (Hidden on Mobile) */}
       <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 h-screen sticky top-0 transition-colors duration-300">
         <div className="p-6 border-b border-slate-100 dark:border-slate-700">
             <h1 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
@@ -404,7 +434,7 @@ function App() {
         </div>
       </aside>
 
-      {/* Mobile Header */}
+      {/* Mobile Top Bar (Simplified) */}
       <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 flex justify-between items-center transition-colors duration-300">
          <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2">
             <Package className="fill-blue-600 text-white" size={24} />
@@ -414,59 +444,11 @@ function App() {
             <button onClick={toggleDarkMode} className="p-2 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-lg">
                 {isDarkMode ? <Moon size={20} /> : <Sun size={20} />}
             </button>
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-600 dark:text-slate-300">
-                {isSidebarOpen ? <X /> : <Menu />}
-            </button>
         </div>
       </div>
 
-      {/* Mobile Sidebar Overlay */}
-      {isSidebarOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden" onClick={() => setIsSidebarOpen(false)}>
-             <div className="bg-white dark:bg-slate-800 w-3/4 h-full p-4 shadow-2xl transition-colors duration-300" onClick={e => e.stopPropagation()}>
-                <div className="mb-8">
-                     <h1 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
-                        <Package className="fill-blue-600 text-white" size={28} />
-                        <span className="dark:text-white text-slate-800">DepoPro</span>
-                    </h1>
-                </div>
-                <nav className="space-y-2">
-                    {navItems.map(item => (
-                        <button
-                            key={item.id}
-                            onClick={() => {
-                                setCurrentView(item.id as ViewState);
-                                setIsSidebarOpen(false);
-                            }}
-                            className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl text-base font-medium transition-all ${
-                                currentView === item.id 
-                                ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' 
-                                : 'text-slate-600 dark:text-slate-300'
-                            }`}
-                        >
-                            <item.icon size={20} />
-                            {item.label}
-                        </button>
-                    ))}
-                    {hasNegativeStock && (
-                        <button
-                            onClick={() => {
-                                setCurrentView('NEGATIVE_STOCK');
-                                setIsSidebarOpen(false);
-                            }}
-                            className="w-full flex items-center gap-3 px-4 py-4 rounded-xl text-base font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all mt-2"
-                        >
-                            <AlertTriangle size={20} />
-                            Eksi Bakiye
-                        </button>
-                    )}
-                </nav>
-             </div>
-        </div>
-      )}
-
       {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-[calc(100vh-64px)] md:h-screen">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-auto min-h-[calc(100vh-140px)] md:h-screen pb-24 md:pb-8">
         <div className="max-w-5xl mx-auto">
             {/* View Title */}
             <div className="mb-6 flex justify-between items-center">
@@ -480,13 +462,13 @@ function App() {
                     <div className="flex gap-2">
                         <button 
                             onClick={() => openBulkModal('PRODUCT')}
-                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-green-200 dark:shadow-none"
+                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-green-200 dark:shadow-none"
                         >
                             <FileSpreadsheet size={18} /> <span className="hidden sm:inline">Excel Yükle</span>
                         </button>
                         <button 
                             onClick={handleAddProductClick}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-blue-200 dark:shadow-none"
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-blue-200 dark:shadow-none"
                         >
                             <Plus size={18} /> <span className="hidden sm:inline">Ürün Ekle</span>
                         </button>
@@ -503,6 +485,7 @@ function App() {
                     onBulkAction={() => openBulkModal('TRANSACTION')}
                     onViewNegativeStock={() => setCurrentView('NEGATIVE_STOCK')}
                     onOrderSimulation={() => setIsOrderSimModalOpen(true)}
+                    onScan={handleGlobalScanClick}
                 />
             )}
             {currentView === 'INVENTORY' && (
@@ -531,18 +514,77 @@ function App() {
         </div>
       </main>
 
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 z-40 pb-safe">
+        <div className="flex justify-around items-center h-16 px-2 relative">
+            
+            {/* Dashboard Tab */}
+            <button 
+                onClick={() => setCurrentView('DASHBOARD')}
+                className={`flex flex-col items-center justify-center w-16 space-y-1 ${currentView === 'DASHBOARD' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
+            >
+                <LayoutDashboard size={24} className={currentView === 'DASHBOARD' ? 'fill-current' : ''} />
+                <span className="text-[10px] font-medium">Özet</span>
+            </button>
+
+            {/* Inventory Tab */}
+            <button 
+                onClick={() => setCurrentView('INVENTORY')}
+                className={`flex flex-col items-center justify-center w-16 space-y-1 ${currentView === 'INVENTORY' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
+            >
+                <Package size={24} className={currentView === 'INVENTORY' ? 'fill-current' : ''} />
+                <span className="text-[10px] font-medium">Stok</span>
+            </button>
+
+            {/* CENTRAL FLOATING SCAN BUTTON */}
+            <div className="relative -top-6">
+                <button 
+                    onClick={handleGlobalScanClick}
+                    className="flex items-center justify-center w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-200 dark:shadow-blue-900/50 active:scale-95 transition-transform border-4 border-white dark:border-slate-800"
+                >
+                    <ScanLine size={28} />
+                </button>
+            </div>
+
+            {/* History Tab */}
+            <button 
+                onClick={() => setCurrentView('HISTORY')}
+                className={`flex flex-col items-center justify-center w-16 space-y-1 ${currentView === 'HISTORY' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}
+            >
+                <History size={24} />
+                <span className="text-[10px] font-medium">Geçmiş</span>
+            </button>
+
+            {/* Negative Stock / Alert Tab */}
+            <button 
+                onClick={() => setCurrentView('NEGATIVE_STOCK')}
+                className={`flex flex-col items-center justify-center w-16 space-y-1 ${currentView === 'NEGATIVE_STOCK' ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}
+            >
+                <div className="relative">
+                    <AlertTriangle size={24} className={currentView === 'NEGATIVE_STOCK' ? 'fill-current' : ''} />
+                    {hasNegativeStock && (
+                        <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-600 border-2 border-white dark:border-slate-800 rounded-full"></span>
+                    )}
+                </div>
+                <span className="text-[10px] font-medium">Uyarı</span>
+            </button>
+        </div>
+      </div>
+
       {/* Modals */}
       <TransactionModal 
         isOpen={isModalOpen}
         onClose={() => {
             setIsModalOpen(false);
             setEditingTransaction(null);
+            setPreSelectedBarcode('');
         }}
         onSubmit={handleTransactionSubmit}
         onDelete={(id) => handleDeleteTransaction(id, () => setIsModalOpen(false))}
         initialType={modalType}
         products={products}
         transactionToEdit={editingTransaction}
+        defaultBarcode={preSelectedBarcode}
       />
 
       <ProductModal

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, BarChart3, FileSpreadsheet, Download, ShieldAlert, ClipboardCheck, Mail } from 'lucide-react';
+import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, BarChart3, FileSpreadsheet, Download, ShieldAlert, ClipboardCheck, Mail, ScanLine } from 'lucide-react';
 import { Product, Transaction, TransactionType } from '../types';
 
 interface DashboardProps {
@@ -10,9 +10,10 @@ interface DashboardProps {
   onBulkAction: () => void;
   onViewNegativeStock: () => void;
   onOrderSimulation: () => void;
+  onScan: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation }) => {
+const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation, onScan }) => {
   const totalProducts = products.length;
   const totalStock = products.reduce((acc, p) => acc + p.current_stock, 0);
   
@@ -135,7 +136,19 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Hızlı İşlemler</h3>
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
+        
+        {/* BIG SCAN BUTTON */}
+        <button 
+          onClick={onScan}
+          className="col-span-2 sm:col-span-1 flex flex-col items-center justify-center p-4 bg-blue-600 active:bg-blue-700 text-white rounded-2xl shadow-lg shadow-blue-200 dark:shadow-none transition-transform transform active:scale-95"
+        >
+          <ScanLine size={32} className="mb-2" />
+          <span className="font-bold text-sm">QR TARA</span>
+          <span className="text-[10px] opacity-80">Hızlı İşlem</span>
+        </button>
+
         <button 
           onClick={() => onQuickAction(TransactionType.IN)}
           className="flex flex-col items-center justify-center p-4 bg-emerald-600 active:bg-emerald-700 text-white rounded-2xl shadow-lg shadow-emerald-200 dark:shadow-none transition-transform transform active:scale-95"
@@ -165,7 +178,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
 
         <button 
           onClick={onBulkAction}
-          className="flex flex-col items-center justify-center p-4 bg-slate-700 active:bg-slate-800 text-white rounded-2xl shadow-lg shadow-slate-300 dark:shadow-none transition-transform transform active:scale-95"
+          className="hidden sm:flex flex-col items-center justify-center p-4 bg-slate-700 active:bg-slate-800 text-white rounded-2xl shadow-lg shadow-slate-300 dark:shadow-none transition-transform transform active:scale-95"
         >
           <FileSpreadsheet size={24} className="mb-1" />
           <span className="font-bold text-sm">EXCEL</span>
@@ -187,14 +200,14 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
                     className="flex-1 sm:flex-none flex items-center justify-center gap-1 text-xs font-bold text-blue-700 dark:text-blue-400 bg-white dark:bg-slate-700 border border-blue-200 dark:border-slate-600 px-3 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors shadow-sm"
                 >
                     <Mail size={14} />
-                    E-Posta Hazırla
+                    E-Posta
                 </button>
                 <button 
                     onClick={handleExportCriticalStock}
                     className="flex-1 sm:flex-none flex items-center justify-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-400 bg-white dark:bg-slate-700 border border-amber-200 dark:border-slate-600 px-3 py-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-slate-600 transition-colors shadow-sm"
                 >
                     <Download size={14} />
-                    Excel İndir
+                    Excel
                 </button>
             </div>
           </div>
