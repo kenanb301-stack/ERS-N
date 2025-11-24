@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Download, PackagePlus, ArrowRightLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -66,14 +65,14 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
         // Basic validation based on mode
         const firstRow = data[0] as any;
         if (mode === 'TRANSACTION') {
-             // Parça Kodu veya Ürün Adı ile eşleşme arayacağız
-             if (!firstRow.hasOwnProperty('Miktar') && (!firstRow.hasOwnProperty('ParcaKodu') && !firstRow.hasOwnProperty('Urun'))) {
-                setError('Hatalı format! Stok Hareketi için "ParcaKodu" (veya "Urun") ve "Miktar" sütunları gereklidir.');
+             // Parça Kodu ÖNCELİKLİ
+             if (!firstRow.hasOwnProperty('Miktar') && !firstRow.hasOwnProperty('ParcaKodu')) {
+                setError('Hatalı format! Stok Hareketi için "ParcaKodu" ve "Miktar" sütunları gereklidir.');
                 return;
             }
         } else {
-            if (!firstRow.hasOwnProperty('Aciklama') && !firstRow.hasOwnProperty('UrunAdi')) {
-                setError('Hatalı format! Ürün Listesi için "Aciklama" veya "UrunAdi" sütunu gereklidir.');
+            if (!firstRow.hasOwnProperty('Aciklama') && !firstRow.hasOwnProperty('ParcaKodu')) {
+                setError('Hatalı format! Liste için "ParcaKodu" veya "Aciklama" sütunları gereklidir.');
                 return;
             }
         }
@@ -93,10 +92,10 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
 
     if (mode === 'TRANSACTION') {
         data = [
-            { "ParcaKodu": "P-00003", "Aciklama": "BASKI LAMASI", "Miktar": 10, "Islem": "GIRIS", "Not": "İmalat" },
-            { "ParcaKodu": "H-20402", "Aciklama": "HİDROLİK PİSTON", "Miktar": 5, "Islem": "CIKIS", "Not": "Montaj" }
+            { "ParcaKodu": "P-00003", "Miktar": 10, "Islem": "GIRIS", "Not": "İmalat" },
+            { "ParcaKodu": "H-20402", "Miktar": 5, "Islem": "CIKIS", "Not": "Montaj" }
         ];
-        filename = "sablon_stok_hareketi.xlsx";
+        filename = "sablon_stok_hareketi_parcakodlu.xlsx";
     } else {
         data = [
             { "ParcaKodu": "P-00003", "Aciklama": "BASKI LAMASI", "Reyon": "B1-06-06", "Hammadde": "ST37", "Birim": "Adet", "KritikStok": 5, "BaslangicStogu": 3, "Kategori": "Yedek Parça" },
@@ -125,27 +124,20 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
 
     parsedData.forEach((row: any, index) => {
       const partCode = row['ParcaKodu'] || row['Parça Kodu'];
-      const productName = row['Aciklama'] || row['Urun'] || row['Ürün'];
       const quantity = row['Miktar'];
       const typeRaw = row['Islem'] || row['İşlem'] || 'GIRIS';
       const desc = row['Not'] || row['Aciklama'] || 'Toplu İşlem';
 
-      if ((!partCode && !productName) || !quantity) {
-        errors.push(`Satır ${index + 2}: Parça kodu/adı veya miktar eksik.`);
+      if (!partCode || !quantity) {
+        errors.push(`Satır ${index + 2}: Parça Kodu veya Miktar eksik.`);
         return;
       }
 
-      // Find by Part Code first, then by Name
-      let product = undefined;
-      if (partCode) {
-          product = products.find(p => p.part_code === partCode.toString().trim());
-      }
-      if (!product && productName) {
-          product = products.find(p => p.product_name.toLowerCase() === productName.toString().trim().toLowerCase());
-      }
+      // Find by Part Code ONLY (as requested)
+      const product = products.find(p => p.part_code === partCode.toString().trim());
 
       if (!product) {
-        errors.push(`Satır ${index + 2}: "${partCode || productName}" sistemde bulunamadı.`);
+        errors.push(`Satır ${index + 2}: "${partCode}" kodlu parça sistemde bulunamadı.`);
         return;
       }
 
@@ -193,10 +185,6 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
         // Check duplicates by Part Code or Name
         if (partCode && products.some(p => p.part_code === partCode.toString().trim())) {
              errors.push(`Satır ${index + 2}: "${partCode}" kodlu parça zaten var.`);
-             return;
-        }
-        if (products.some(p => p.product_name.toLowerCase() === name.toString().trim().toLowerCase())) {
-             errors.push(`Satır ${index + 2}: "${name}" isimli parça zaten var.`);
              return;
         }
 
@@ -261,7 +249,7 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
           <div className={`${mode === 'TRANSACTION' ? 'bg-blue-50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-900/40' : 'bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-900/40'} p-4 rounded-xl border`}>
             <h3 className={`text-sm font-bold ${mode === 'TRANSACTION' ? 'text-blue-800 dark:text-blue-300' : 'text-green-800 dark:text-green-300'} mb-1`}>Adım 1: Şablonu İndirin</h3>
             <p className={`text-xs ${mode === 'TRANSACTION' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'} mb-3`}>
-                {mode === 'TRANSACTION' ? 'Giriş ve Çıkış işlemleri için bu formatı kullanın.' : 'Yeni parça listesini (Reyon, Hammadde vb.) topluca eklemek için bu formatı kullanın.'}
+                {mode === 'TRANSACTION' ? 'Giriş ve Çıkış işlemleri için "Parça Kodu" zorunludur.' : 'Yeni parça listesini (Reyon, Hammadde vb.) topluca eklemek için bu formatı kullanın.'}
             </p>
             <button 
                 onClick={handleDownloadTemplate}

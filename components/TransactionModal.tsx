@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2, QrCode } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2, QrCode, Hash } from 'lucide-react';
 import { Product, Transaction, TransactionType } from '../types';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -37,7 +37,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         setProductId(transactionToEdit.product_id);
         setQuantity(transactionToEdit.quantity);
         setDescription(transactionToEdit.description);
-        setSearchTerm(transactionToEdit.product_name || '');
+        
+        // Parça kodunu bulup arama kutusuna onu yazıyoruz
+        const product = products.find(p => p.id === transactionToEdit.product_id);
+        setSearchTerm(product?.part_code || product?.product_name || '');
+        
         setError('');
         setIsDropdownOpen(false);
         setScannedBarcode('');
@@ -53,7 +57,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         setScannedBarcode('');
       }
     }
-  }, [isOpen, initialType, transactionToEdit]);
+  }, [isOpen, initialType, transactionToEdit, products]);
 
   // Click outside to close dropdown
   useEffect(() => {
@@ -74,13 +78,15 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const willBeNegative = !transactionToEdit && type === TransactionType.OUT && selectedProduct && quantity && (selectedProduct.current_stock - Number(quantity) < 0);
 
   const filteredProducts = products.filter(p => 
+    (p.part_code && p.part_code.toLowerCase().includes(searchTerm.toLowerCase())) ||
     p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (p.barcode && p.barcode.includes(searchTerm))
   );
 
   const handleProductSelect = (product: Product) => {
     setProductId(product.id);
-    setSearchTerm(product.product_name);
+    // Input'a Parça Kodunu yazıyoruz
+    setSearchTerm(product.part_code || product.product_name);
     setScannedBarcode(product.barcode || '');
     setIsDropdownOpen(false);
     setError('');
@@ -109,7 +115,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     e.preventDefault();
     
     if (!productId) {
-      setError('Lütfen listeden bir ürün seçin.');
+      setError('Lütfen listeden geçerli bir parça kodu seçin.');
       return;
     }
     if (!quantity || Number(quantity) <= 0) {
@@ -186,7 +192,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 <div className="flex gap-2 mb-2">
                     <input 
                         type="text"
-                        placeholder="QR Kod tara veya yaz..."
+                        placeholder="QR Kod okut..."
                         value={scannedBarcode}
                         onChange={(e) => {
                             setScannedBarcode(e.target.value);
@@ -210,9 +216,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 </div>
             )}
 
-            {/* Searchable Product Input */}
+            {/* Searchable Product Input (PARÇA KODU ODAKLI) */}
             <div className="relative" ref={dropdownRef}>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Ürün</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Parça Kodu</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
@@ -220,20 +226,18 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 value={searchTerm}
                 onChange={(e) => {
                     setSearchTerm(e.target.value);
-                    if (transactionToEdit && searchTerm !== e.target.value) {
-                    }
                     setProductId(''); 
                     setIsDropdownOpen(true);
                 }}
                 onFocus={() => setIsDropdownOpen(true)}
-                placeholder="Ürün adı yazın..."
-                className={`w-full pl-10 pr-10 py-3 rounded-lg border outline-none transition-all bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
+                placeholder="Parça kodunu yazın..."
+                className={`w-full pl-10 pr-10 py-3 rounded-lg border outline-none transition-all font-mono font-bold text-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
                 />
                 {productId && (
                     <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 dark:text-green-400" size={18} />
                 )}
                 {!productId && (
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                    <Hash className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                 )}
               </div>
 
@@ -241,7 +245,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               {isDropdownOpen && (
                 <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                   {filteredProducts.length === 0 ? (
-                    <div className="p-3 text-sm text-slate-500 dark:text-slate-400 text-center">Ürün bulunamadı.</div>
+                    <div className="p-3 text-sm text-slate-500 dark:text-slate-400 text-center">Kayıt bulunamadı.</div>
                   ) : (
                     filteredProducts.map(p => (
                       <button
@@ -251,19 +255,23 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-600 border-b border-slate-50 dark:border-slate-600 last:border-0 transition-colors flex justify-between items-center group"
                       >
                         <div className="flex items-center gap-3">
-                             {p.image_url && (
-                                 <img src={p.image_url} className="w-8 h-8 rounded object-cover" alt="" />
-                             )}
-                            <div>
-                                <div className="font-medium text-slate-800 dark:text-white group-hover:text-primary dark:group-hover:text-blue-400">
+                             <div className="flex flex-col">
+                                {/* Parça Kodu ÖNCELİKLİ */}
+                                <span className="font-bold font-mono text-slate-800 dark:text-white text-lg group-hover:text-primary dark:group-hover:text-blue-400">
+                                    {p.part_code || 'KODSUZ'}
+                                </span>
+                                {/* Ürün adı sadece bilgi amaçlı küçük */}
+                                <span className="text-xs text-slate-400 dark:text-slate-500">
                                     {p.product_name}
-                                    {p.barcode && <span className="ml-2 text-xs text-slate-400 font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">{p.barcode}</span>}
-                                </div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">{p.category}</div>
-                            </div>
+                                </span>
+                             </div>
                         </div>
-                        <div className={`text-xs font-bold px-2 py-1 rounded ${p.current_stock <= p.min_stock_level ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
-                            {p.current_stock} {p.unit}
+                        
+                        <div className="text-right">
+                             <div className={`text-xs font-bold px-2 py-1 rounded ${p.current_stock <= p.min_stock_level ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                                {p.current_stock} {p.unit}
+                            </div>
+                             {p.location && <div className="text-[10px] text-slate-500 mt-1 bg-orange-50 dark:bg-orange-900/10 px-1 rounded inline-block">{p.location}</div>}
                         </div>
                       </button>
                     ))
@@ -281,7 +289,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                   value={quantity}
                   onChange={(e) => setQuantity(Number(e.target.value))}
                   placeholder="0"
-                  className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                  className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none font-bold text-lg"
                 />
                 {selectedProduct ? (
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400 text-sm font-medium bg-slate-100 dark:bg-slate-600 px-2 py-1 rounded">
@@ -303,21 +311,15 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                       </span>
                   </div>
               )}
-              {/* Edit Mode Info */}
-              {transactionToEdit && (
-                  <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400 text-xs rounded">
-                      Bu değişiklik stok bakiyesine otomatik yansıtılacaktır.
-                  </div>
-              )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Açıklama</label>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Açıklama / Not</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={type === TransactionType.IN ? "Örn: Toptancı teslimatı" : "Örn: Üretim hattına sevk"}
-                rows={3}
+                rows={2}
                 className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none resize-none"
               />
             </div>
