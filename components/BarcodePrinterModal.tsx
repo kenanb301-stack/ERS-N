@@ -95,6 +95,16 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 size: 56mm 40mm;
                 margin: 0;
             }
+            /* Kaydırma çubuklarını gizle - Siyah şerit sorununu çözer */
+            ::-webkit-scrollbar {
+                display: none !important;
+            }
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 56mm;
+                background-color: white !important;
+            }
             body * {
                 visibility: hidden;
             }
@@ -109,6 +119,8 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 left: 0;
                 top: 0;
                 width: 56mm;
+                margin: 0;
+                padding: 0;
             }
             /* Her etiket ayrı bir sayfadır */
             .label-container {
@@ -124,7 +136,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 background: white;
                 color: black;
                 overflow: hidden;
-                border: none;
+                border: none !important; /* Kenarlık olmamasını garanti et */
                 align-items: center;
                 justify-content: flex-start;
             }
