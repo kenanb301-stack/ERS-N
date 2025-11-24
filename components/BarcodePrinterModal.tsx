@@ -235,7 +235,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                                 {/* EKRAN ÖNİZLEME */}
                                 <div className="label-container bg-white shadow-sm">
                                     <div className="w-full flex justify-between items-center mb-2">
-                                        <div className="text-[14px] font-black font-mono text-slate-800 tracking-tighter">
+                                        <div className="text-[18px] font-black font-mono text-slate-800 tracking-tighter leading-none">
                                             {product.part_code || 'KODSUZ'}
                                         </div>
                                         <div className="text-[12px] font-bold border-2 border-black px-1.5 py-0.5 rounded text-black">
@@ -277,7 +277,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         {validProducts.filter(p => selectedProductIds.has(p.id)).map(product => (
             <div key={`print-${product.id}`} className="label-container">
                 <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2mm' }}>
-                    <span style={{ fontSize: '13pt', fontWeight: '900', fontFamily: 'monospace', letterSpacing: '-0.5px' }}>
+                    <span style={{ fontSize: '20pt', fontWeight: '900', fontFamily: 'monospace', letterSpacing: '-1.5px', lineHeight: '0.9' }}>
                         {product.part_code || ''}
                     </span>
                     <span style={{ fontSize: '11pt', fontWeight: 'bold', border: '2px solid black', padding: '1px 4px', borderRadius: '4px' }}>
