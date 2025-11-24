@@ -112,12 +112,15 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       
       if (product) {
           handleProductSelect(product);
+          // AUTO SET QUANTITY TO 1 FOR FASTER WORKFLOW
+          setQuantity(1);
           // Optional: Focus quantity field here if needed
           setTimeout(() => document.getElementById('quantityInput')?.focus(), 100);
       } else {
           setError(`"${code}" kodlu ürün bulunamadı.`);
           setProductId('');
           setSearchTerm('');
+          setQuantity('');
       }
   };
 
@@ -224,7 +227,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                     <button 
                         type="button" 
                         onClick={() => setShowScanner(true)}
-                        className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 transition-transform"
                     >
                         <QrCode size={20} />
                     </button>
