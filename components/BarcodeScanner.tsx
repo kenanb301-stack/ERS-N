@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { X, Camera, ScanLine, Zap, ZapOff, ZoomIn, ZoomOut } from 'lucide-react';
+import { X, Camera, ScanLine, Zap, ZapOff, ZoomIn, ZoomOut, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface BarcodeScannerProps {
   onScanSuccess: (decodedText: string) => void;
@@ -15,6 +15,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
   const [torchOn, setTorchOn] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [zoomCap, setZoomCap] = useState<{min: number, max: number} | null>(null);
+  const [status, setStatus] = useState<string>('Kamera başlatılıyor...');
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const mountedRef = useRef<boolean>(true);
@@ -27,6 +28,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
 
   useEffect(() => {
     mountedRef.current = true;
+
+    // 1. HTTPS Kontrolü
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        setError("Güvenlik nedeniyle tarayıcılar kamerayı sadece HTTPS veya Localhost üzerinde çalıştırır. Lütfen güvenli bağlantı kullanın.");
+        return;
+    }
 
     const startScanner = async () => {
       // Önceki bir instance varsa temizle
@@ -42,7 +49,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
       }
 
       // Formatları kısıtlamak performansı CİDDİ oranda artırır.
-      // Gereksiz formatları (Aztec, PDF417 vb.) taramaya çalışmaz.
       const formatsToSupport = [
         Html5QrcodeSupportedFormats.CODE_128,
         Html5QrcodeSupportedFormats.CODE_39,
@@ -61,90 +67,117 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
       scannerRef.current = html5QrCode;
 
       const config = {
-        fps: 15, // FPS artırıldı
-        qrbox: { width: 300, height: 200 }, // Alan biraz daha genişletildi
+        fps: 15,
+        qrbox: { width: 300, height: 200 },
         aspectRatio: 1.0,
         disableFlip: false,
       };
 
-      const videoConstraints = {
-          facingMode: "environment",
-          width: { min: 640, ideal: 1280, max: 1920 }, // Daha yüksek çözünürlük iste
-          height: { min: 480, ideal: 720, max: 1080 },
-          focusMode: "continuous" // Sürekli odaklama iste
+      // Kademeli Başlatma Stratejisi
+      // 1. Yüksek Kalite (Çözünürlük kısıtlamalı)
+      // 2. Standart (Sadece facingMode)
+      // 3. Herhangi bir kamera
+
+      const startWithConstraints = async (constraints: any, attemptName: string) => {
+          console.log(`Kamera başlatılıyor (${attemptName})...`);
+          setStatus(`Kamera başlatılıyor (${attemptName})...`);
+          
+          await html5QrCode.start(
+            constraints, 
+            config,
+            (decodedText) => {
+                if (!mountedRef.current) return;
+                playBeep();
+                
+                if (scannerRef.current?.isScanning) {
+                     scannerRef.current.stop().then(() => {
+                        scannerRef.current?.clear();
+                        onScanSuccess(decodedText);
+                    }).catch(err => {
+                        onScanSuccess(decodedText);
+                    });
+                } else {
+                    onScanSuccess(decodedText);
+                }
+            },
+            (errorMessage) => {
+                // Okuma hatası - kritik değil
+            }
+          );
       };
 
       try {
-        await html5QrCode.start(
-          videoConstraints, 
-          config,
-          (decodedText) => {
-            if (!mountedRef.current) return;
-            playBeep();
+        // DENEME 1: Arka Kamera + Yüksek Çözünürlük
+        try {
+            await startWithConstraints({
+                facingMode: "environment",
+                width: { min: 640, ideal: 1280, max: 1920 },
+                height: { min: 480, ideal: 720, max: 1080 },
+                focusMode: "continuous"
+            }, "HD Modu");
+        } catch (errHigh) {
+            console.warn("HD mod başarısız, standart moda geçiliyor...", errHigh);
             
-            if (scannerRef.current?.isScanning) {
-                 scannerRef.current.stop().then(() => {
-                    scannerRef.current?.clear();
-                    onScanSuccess(decodedText);
-                }).catch(err => {
-                    onScanSuccess(decodedText);
-                });
-            } else {
-                onScanSuccess(decodedText);
-            }
-          },
-          (errorMessage) => {
-            // Okuma hatası
-          }
-        );
+            // DENEME 2: Sadece Arka Kamera (Çözünürlük yok)
+            try {
+                await startWithConstraints({ facingMode: "environment" }, "Standart Mod");
+            } catch (errBasic) {
+                console.warn("Standart arka kamera başarısız, herhangi bir kamera deneniyor...", errBasic);
 
-        // Kamera özelliklerini kontrol et (Zoom ve Flash için)
-        if (html5QrCode.isScanning) {
-            // @ts-ignore - Kütüphane tiplerinde eksiklik olabilir
-            const track = html5QrCode.getRunningTrackCameraCapabilities();
-            const capabilities = html5QrCode.getRunningTrackCapabilities() as any;
-
-            if (capabilities.torch) {
-                setHasTorch(true);
-            }
-
-            if (capabilities.zoom) {
-                setZoomCap({
-                    min: capabilities.zoom.min,
-                    max: capabilities.zoom.max
-                });
-                setZoom(capabilities.zoom.min); // Başlangıç zoom seviyesi
+                // DENEME 3: Herhangi bir kamera (Örn: Ön kamera veya laptop kamerası)
+                await startWithConstraints({ facingMode: "user" }, "Genel Mod");
             }
         }
 
-      } catch (err) {
-        console.error("Environment camera failed", err);
-        // Fallback: Varsayılan kamera
-        try {
-            if (!mountedRef.current) return;
-            await html5QrCode.start(
-                { facingMode: "user" },
-                config,
-                (decodedText) => {
-                    playBeep();
-                    onScanSuccess(decodedText);
-                    onClose();
-                },
-                () => {}
-            );
-        } catch (err2) {
-            if (mountedRef.current) {
-                setError("Kamera başlatılamadı. İzinleri kontrol edin.");
+        // Başarılı olursa yetenekleri kontrol et
+        if (html5QrCode.isScanning) {
+            try {
+                 // @ts-ignore - Kütüphane tiplerinde eksiklik olabilir
+                const capabilities = html5QrCode.getRunningTrackCapabilities() as any;
+
+                if (capabilities.torch) {
+                    setHasTorch(true);
+                }
+
+                if (capabilities.zoom) {
+                    setZoomCap({
+                        min: capabilities.zoom.min,
+                        max: capabilities.zoom.max
+                    });
+                    setZoom(capabilities.zoom.min);
+                }
+            } catch (capErr) {
+                console.log("Kamera yetenekleri alınamadı", capErr);
             }
+        }
+
+      } catch (finalErr: any) {
+        console.error("Tüm kamera denemeleri başarısız oldu", finalErr);
+        let msg = "Kamera başlatılamadı.";
+        
+        if (finalErr?.name === "NotAllowedError" || finalErr?.name === "PermissionDeniedError") {
+            msg = "Kamera izni reddedildi. Lütfen tarayıcı ayarlarından kameraya izin verin.";
+        } else if (finalErr?.name === "NotFoundError" || finalErr?.name === "DevicesNotFoundError") {
+            msg = "Kamera cihazı bulunamadı.";
+        } else if (finalErr?.name === "NotReadableError" || finalErr?.name === "TrackStartError") {
+            msg = "Kamera şu anda başka bir uygulama tarafından kullanılıyor veya erişilemiyor.";
+        } else if (finalErr?.name === "OverconstrainedError") {
+            msg = "Kamera istenen çözünürlüğü desteklemiyor.";
+        }
+        
+        if (mountedRef.current) {
+            setError(msg);
         }
       }
     };
 
-    setTimeout(() => {
+    // UI render olduktan hemen sonra başlat
+    const timer = setTimeout(() => {
         startScanner();
     }, 100);
 
     return () => {
+      clearTimeout(timer);
       mountedRef.current = false;
       if (scannerRef.current && scannerRef.current.isScanning) {
         scannerRef.current.stop().catch(err => console.error("Cleanup failed", err));
@@ -172,6 +205,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
               advanced: [{ zoom: newZoom }]
           } as any).catch(err => console.error("Zoom error", err));
       }
+  };
+
+  const handleRetry = () => {
+      setError('');
+      setStatus('Yeniden deneniyor...');
+      // useEffect'i tetiklemek için basit bir trick: componenti unmount/mount etmek yerine sayfayı yenilemek en temizi ama burada state reset yeterli
+      window.location.reload(); 
   };
 
   return (
@@ -203,25 +243,40 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
       {/* Camera View */}
       <div className="w-full h-full relative flex items-center justify-center bg-black overflow-hidden">
         {error ? (
-            <div className="text-white text-center p-6 px-10">
-                <div className="mb-4 bg-red-500/20 p-4 rounded-full inline-block">
-                    <X size={48} className="text-red-500" />
+            <div className="text-white text-center p-6 px-10 max-w-md">
+                <div className="mb-4 bg-red-500/20 p-4 rounded-full inline-block animate-bounce">
+                    <AlertTriangle size={48} className="text-red-500" />
                 </div>
                 <p className="text-lg font-bold mb-2">Kamera Hatası</p>
-                <p className="text-sm text-gray-300 mb-6">{error}</p>
-                <button onClick={onClose} className="px-6 py-3 bg-white text-black rounded-xl font-bold active:scale-95 transition-transform">
-                    Kapat
-                </button>
+                <p className="text-sm text-gray-300 mb-6 leading-relaxed">{error}</p>
+                <div className="flex gap-3 justify-center">
+                    <button onClick={onClose} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
+                        Kapat
+                    </button>
+                    <button onClick={handleRetry} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-2 transition-colors">
+                        <RefreshCw size={18} /> Yeniden Dene
+                    </button>
+                </div>
             </div>
         ) : (
             <>
-                <div id="reader" className="w-full h-full"></div>
+                <div id="reader" className="w-full h-full bg-black"></div>
+                
+                {/* Status Loading Overlay */}
+                {!scannerRef.current?.isScanning && !error && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+                        <div className="text-center">
+                            <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                            <p className="text-white text-sm">{status}</p>
+                        </div>
+                    </div>
+                )}
                 
                 {/* Overlay UI */}
                 {!error && (
                     <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
                         {/* Scan Area Box */}
-                        <div className="w-80 h-48 border-2 border-white/40 rounded-xl relative overflow-hidden bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]">
+                        <div className="w-72 h-48 sm:w-80 sm:h-56 border-2 border-white/40 rounded-xl relative overflow-hidden bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]">
                             {/* Scanning Line Animation */}
                             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[2px] h-full bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.9)] animate-[scan-horizontal_2s_ease-in-out_infinite]"></div>
                             
@@ -234,7 +289,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
 
                         {/* Zoom Controls (Pointer events enabled for slider) */}
                         {zoomCap && (
-                             <div className="absolute bottom-24 w-64 pointer-events-auto flex items-center gap-3 bg-black/50 p-2 rounded-full backdrop-blur-sm">
+                             <div className="absolute bottom-24 w-64 pointer-events-auto flex items-center gap-3 bg-black/50 p-2 rounded-full backdrop-blur-sm animate-fade-in-up">
                                 <ZoomOut size={16} className="text-white" />
                                 <input 
                                     type="range" 
@@ -249,7 +304,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
                              </div>
                         )}
 
-                        <p className="absolute bottom-10 text-white/90 text-sm font-bold bg-black/60 px-6 py-2 rounded-full backdrop-blur-md flex items-center gap-2">
+                        <p className="absolute bottom-10 text-white/90 text-xs sm:text-sm font-bold bg-black/60 px-6 py-2 rounded-full backdrop-blur-md flex items-center gap-2">
                             <ScanLine size={16} /> Barkodu çerçeveye ortalayın
                         </p>
                     </div>
