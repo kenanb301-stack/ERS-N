@@ -1,10 +1,6 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud } from 'lucide-react';
-// @ts-ignore
-import { ref, onValue, set, DataSnapshot } from 'firebase/database';
-// @ts-ignore
-import type { Database } from 'firebase/database';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -18,10 +14,8 @@ import BarcodeScanner from './components/BarcodeScanner';
 import Analytics from './components/Analytics';
 import Login from './components/Login';
 import DataBackupModal from './components/DataBackupModal';
-import CloudSyncModal from './components/CloudSyncModal';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState, User } from './types';
-import { initializeFirebase, FirebaseConfig } from './services/firebase';
 
 // Utility to generate simple ID
 const generateId = () => Math.random().toString(36).substring(2, 11);
@@ -54,14 +48,6 @@ function App() {
     }
   });
 
-  // FIREBASE / CLOUD STATE
-  const [firebaseDb, setFirebaseDb] = useState<any>(null);
-  const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
-  const [cloudConfig, setCloudConfig] = useState<FirebaseConfig | null>(() => {
-      const saved = localStorage.getItem('depopro_firebase_config');
-      return saved ? JSON.parse(saved) : null;
-  });
-
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   
   // Modal States
@@ -83,57 +69,12 @@ function App() {
   // Global Scanner State
   const [isGlobalScannerOpen, setIsGlobalScannerOpen] = useState(false);
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
   // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
     // Default to true (Dark Mode) if no preference is saved
     return saved ? JSON.parse(saved) : true;
   });
-
-  // --- PERSISTENCE & SYNC LOGIC ---
-
-  // 1. Initialize Firebase if config exists
-  useEffect(() => {
-    if (cloudConfig && cloudConfig.databaseURL) {
-        try {
-            const db = initializeFirebase(cloudConfig);
-            setFirebaseDb(db);
-        } catch (e) {
-            console.error("Firebase init failed:", e);
-        }
-    }
-  }, [cloudConfig]);
-
-  // 2. Listen to Firebase Updates (READ)
-  useEffect(() => {
-    if (!firebaseDb) return;
-
-    const dataRef = ref(firebaseDb, 'data');
-    const unsubscribe = onValue(dataRef, (snapshot: any) => {
-        const data = snapshot.val();
-        if (data) {
-            // Cloud'dan veri geldiğinde yerel state'i güncelle
-            if (data.products) {
-                setProducts(data.products);
-                localStorage.setItem('depopro_products', JSON.stringify(data.products));
-            }
-            if (data.transactions) {
-                setTransactions(data.transactions);
-                localStorage.setItem('depopro_transactions', JSON.stringify(data.transactions));
-            }
-        } else {
-            // Cloud boşsa ve yerelde veri varsa, ilk kez yüklüyoruzdur.
-            // Bu durumda yerel veriyi buluta gönderelim (İlk Senkronizasyon)
-            if (products.length > 0) {
-                syncDataToCloud(products, transactions);
-            }
-        }
-    });
-
-    return () => unsubscribe();
-  }, [firebaseDb]); // Sadece DB bağlantısı değiştiğinde listener'ı yenile
 
   // 3. Centralized Save Function (WRITE)
   const saveData = (newProducts: Product[], newTransactions: Transaction[]) => {
@@ -144,39 +85,6 @@ function App() {
       // 2. Update LocalStorage (Backup)
       localStorage.setItem('depopro_products', JSON.stringify(newProducts));
       localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
-
-      // 3. Update Firebase (Sync)
-      if (firebaseDb) {
-          syncDataToCloud(newProducts, newTransactions);
-      }
-  };
-
-  const syncDataToCloud = (prods: Product[], trans: Transaction[]) => {
-      if (!firebaseDb) return;
-      // Tüm veriyi 'data' düğümünün altına yazıyoruz
-      set(ref(firebaseDb, 'data'), {
-          products: prods,
-          transactions: trans,
-          lastUpdated: new Date().toISOString(),
-          updatedBy: currentUser?.name || 'Unknown'
-      }).catch((err: any) => console.error("Cloud sync failed:", err));
-  };
-
-  // --- CLOUD SETTINGS HANDLERS ---
-  const handleSaveCloudConfig = (config: FirebaseConfig) => {
-      setCloudConfig(config);
-      localStorage.setItem('depopro_firebase_config', JSON.stringify(config));
-      setIsCloudModalOpen(false);
-      alert("Ayarlar kaydedildi. Bağlantı kuruluyor...");
-      window.location.reload(); // Temiz başlangıç için yenile
-  };
-
-  const handleDisconnectCloud = () => {
-      setCloudConfig(null);
-      setFirebaseDb(null);
-      localStorage.removeItem('depopro_firebase_config');
-      setIsCloudModalOpen(false);
-      window.location.reload();
   };
 
   // --- APP EFFECTS ---
@@ -678,14 +586,6 @@ function App() {
              {currentUser.role === 'ADMIN' && (
                  <>
                     <button 
-                        onClick={() => setIsCloudModalOpen(true)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all border ${firebaseDb ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400' : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 dark:bg-slate-700/50 dark:border-slate-600 dark:text-slate-300'}`}
-                    >
-                        <Cloud size={20} className={firebaseDb ? 'text-green-600' : 'text-blue-500'} />
-                        {firebaseDb ? 'Bulut Aktif' : 'Bulut Bağlantısı'}
-                    </button>
-
-                    <button 
                         onClick={() => setIsDataBackupOpen(true)}
                         className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all bg-slate-50 hover:bg-slate-100 dark:bg-slate-700/50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
                     >
@@ -729,11 +629,6 @@ function App() {
             <span className="dark:text-white text-slate-800">DepoPro</span>
         </h1>
         <div className="flex items-center gap-2">
-            {currentUser.role === 'ADMIN' && (
-                <button onClick={() => setIsCloudModalOpen(true)} className={`p-2 rounded-lg ${firebaseDb ? 'text-green-600 bg-green-50 dark:bg-green-900/20' : 'text-blue-600 bg-blue-50 dark:bg-blue-900/20'}`}>
-                    <Cloud size={18} />
-                </button>
-            )}
             <span className="text-xs font-bold text-slate-600 dark:text-slate-300 mr-1 hidden sm:inline">{currentUser.name}</span>
             <button onClick={handleLogout} className="p-2 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg">
                 <LogOut size={18} />
@@ -905,15 +800,6 @@ function App() {
                 onClose={() => setIsDataBackupOpen(false)}
                 onBackup={handleBackupData}
                 onRestore={handleRestoreData}
-            />
-
-            <CloudSyncModal 
-                isOpen={isCloudModalOpen}
-                onClose={() => setIsCloudModalOpen(false)}
-                onSave={handleSaveCloudConfig}
-                onDisconnect={handleDisconnectCloud}
-                currentConfig={cloudConfig}
-                isConnected={!!firebaseDb}
             />
         </>
       )}
