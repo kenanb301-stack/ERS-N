@@ -13,7 +13,6 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'Adet',
     current_stock: 3, // Kritik seviye altı (Örnekteki miktar)
     barcode: 'P-00003',
-    image_url: 'https://images.unsplash.com/photo-1535295972055-1c762f4483e5?auto=format&fit=crop&q=80&w=200',
     created_at: '2023-10-01',
   },
   {
@@ -27,7 +26,6 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'Adet',
     current_stock: 8,
     barcode: 'H-20402',
-    image_url: 'https://images.unsplash.com/photo-1517260739337-6799d239ce83?auto=format&fit=crop&q=80&w=200',
     created_at: '2023-10-05',
   },
   {
@@ -41,7 +39,6 @@ export const INITIAL_PRODUCTS: Product[] = [
     unit: 'Adet',
     current_stock: 450,
     barcode: 'C-1240-88',
-    image_url: 'https://images.unsplash.com/photo-1585314062340-f1a5a7c9328d?auto=format&fit=crop&q=80&w=200',
     created_at: '2023-11-12',
   },
 ];

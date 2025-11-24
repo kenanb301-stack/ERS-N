@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, QrCode, Printer, Image as ImageIcon, MapPin, Hexagon } from 'lucide-react';
+import { Search, Filter, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, Printer, MapPin, Hexagon } from 'lucide-react';
 import { Product } from '../types';
 import { CATEGORIES } from '../constants';
 
@@ -121,15 +121,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
               className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-md transition-all relative group"
             >
               <div className="flex-1 flex gap-4 items-start sm:items-center">
-                {/* Product Image Thumbnail */}
-                <div className="w-20 h-20 sm:w-16 sm:h-16 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-600 flex-shrink-0">
-                    {product.image_url ? (
-                        <img src={product.image_url} alt={product.product_name} className="w-full h-full object-cover" />
-                    ) : (
-                        <ImageIcon className="text-slate-300 dark:text-slate-500" size={24} />
-                    )}
-                </div>
-
+                
                 <div className="flex-1 w-full">
                     <div className="flex flex-col gap-1">
                         <div className="flex justify-between items-start w-full">

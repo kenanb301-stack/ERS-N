@@ -15,7 +15,6 @@ export interface Product {
   unit: string;
   current_stock: number;
   barcode?: string; // QR kod içeriği
-  image_url?: string;
   created_at?: string;
 }
 
