@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, BarChart3, FileSpreadsheet, Download, ShieldAlert, ClipboardCheck, Mail, ScanLine, Clock, Check, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, BarChart3, FileSpreadsheet, Download, ShieldAlert, ClipboardCheck, Mail, ScanLine, Clock, Check, RefreshCw, CloudOff } from 'lucide-react';
 import { Product, Transaction, TransactionType, User } from '../types';
 
 interface DashboardProps {
@@ -14,9 +14,11 @@ interface DashboardProps {
   onScan: () => void;
   onReportSent: (productIds: string[]) => void;
   currentUser: User;
+  isCloudEnabled?: boolean;
+  onOpenCloudSetup?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation, onScan, onReportSent, currentUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation, onScan, onReportSent, currentUser, isCloudEnabled, onOpenCloudSetup }) => {
   const totalProducts = products.length;
   
   const lowStockProducts = products.filter(p => p.current_stock <= p.min_stock_level && p.current_stock >= 0);
@@ -100,6 +102,28 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
 
   return (
     <div className="space-y-6 pb-20">
+      
+      {/* Cloud Not Connected Warning */}
+      {currentUser.role === 'ADMIN' && isCloudEnabled === false && (
+         <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 p-4 rounded-xl flex items-start gap-3 animate-fade-in">
+            <CloudOff className="text-amber-600 dark:text-amber-500 mt-1 flex-shrink-0" size={24} />
+            <div className="flex-1">
+                <h3 className="font-bold text-amber-800 dark:text-amber-400 text-sm">Bulut Eşitlemesi Kapalı (Yerel Mod)</h3>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1 opacity-90 leading-relaxed">
+                    Şu an verileriniz sadece bu cihazda saklanıyor. Mobildeki ve PC'deki verilerin aynı olması için <strong>Drive Kurulumu</strong> yapmalısınız.
+                </p>
+                {onOpenCloudSetup && (
+                    <button 
+                        onClick={onOpenCloudSetup}
+                        className="mt-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg transition-colors"
+                    >
+                        Şimdi Kurulum Yap
+                    </button>
+                )}
+            </div>
+         </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         

@@ -82,8 +82,7 @@ function doPost(e) {
                     <CheckCircle size={16} /> Nasıl Çalışır?
                 </h3>
                 <p className="text-sm text-blue-700 dark:text-blue-200 opacity-90">
-                    Verileriniz Google Hesabınızdaki bir Excel dosyasında saklanır. 
-                    Aşağıdaki adımları bir kere yaparak aldığınız linki, tüm cihazlarınıza girerseniz veriler ortak havuzda toplanır.
+                    Mobil ve PC'nizin aynı verileri görmesi için <strong>AYNI URL'yi</strong> her iki cihaza da girmeniz gerekir. Verileriniz Google Hesabınızdaki bir Excel dosyasında toplanır.
                 </p>
             </div>
 
@@ -153,7 +152,7 @@ function doPost(e) {
                         className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 outline-none font-mono text-xs sm:text-sm"
                     />
                 </div>
-                <p className="text-xs text-slate-400">Bu linki diğer cihazlarınızdaki uygulamaya da girerseniz verileriniz ortak olur.</p>
+                <p className="text-xs text-slate-400 font-bold">ÖNEMLİ: Bu linki kopyalayın ve hem PC'de hem Mobilde aynı şekilde girin.</p>
             </div>
 
             <button 

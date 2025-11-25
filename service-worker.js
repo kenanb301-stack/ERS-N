@@ -1,4 +1,5 @@
-const CACHE_NAME = 'depopro-v1';
+
+const CACHE_NAME = 'depopro-v1.1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -9,6 +10,7 @@ const ASSETS_TO_CACHE = [
 
 // Install Event
 self.addEventListener('install', (event) => {
+  self.skipWaiting(); // Force activate new SW immediately
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);
@@ -29,6 +31,7 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  self.clients.claim(); // Take control of all clients immediately
 });
 
 // Fetch Event

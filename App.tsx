@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw, CheckCircle2, Loader2, WifiOff } from 'lucide-react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw, CheckCircle2, Loader2, WifiOff, Info } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -21,6 +21,8 @@ import { Product, Transaction, TransactionType, ViewState, User, CloudConfig } f
 
 // Utility to generate simple ID
 const generateId = () => Math.random().toString(36).substring(2, 11);
+
+const APP_VERSION = "1.1.0";
 
 function App() {
   // --- AUTH STATE ---
@@ -653,6 +655,7 @@ function App() {
                 <Package className="fill-blue-600 text-white" size={28} />
                 <span className="dark:text-white text-slate-800">DepoPro</span>
             </h1>
+            <p className="text-xs text-slate-400 mt-1 pl-1">v{APP_VERSION}</p>
         </div>
         <nav className="flex-1 p-4 space-y-2">
             {navItems.map(item => (
@@ -693,16 +696,17 @@ function App() {
                             {syncStatus === 'SYNCING' && <Loader2 size={16} className="text-blue-500 animate-spin" />}
                             {syncStatus === 'SUCCESS' && <CheckCircle2 size={16} className="text-green-500" />}
                             {syncStatus === 'ERROR' && <WifiOff size={16} className="text-red-500" />}
-                            {syncStatus === 'IDLE' && <Cloud size={16} className="text-slate-400" />}
+                            {syncStatus === 'IDLE' && <Cloud size={16} className={cloudConfig?.scriptUrl ? "text-blue-500" : "text-slate-400"} />}
                             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                                 {syncStatus === 'SYNCING' ? 'Eşitleniyor...' : 
                                  syncStatus === 'SUCCESS' ? 'Eşitlendi' :
-                                 syncStatus === 'ERROR' ? 'Hata' : 'Otomatik'}
+                                 syncStatus === 'ERROR' ? 'Hata' : 
+                                 cloudConfig?.scriptUrl ? 'Otomatik' : 'Yerel Mod'}
                             </span>
                         </div>
                         <button 
                             onClick={() => performCloudLoad(false)}
-                            disabled={syncStatus === 'SYNCING'}
+                            disabled={syncStatus === 'SYNCING' || !cloudConfig?.scriptUrl}
                             title="Zorla Eşitle"
                         >
                             <RefreshCw size={14} className={`text-slate-400 hover:text-blue-500 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
@@ -711,9 +715,10 @@ function App() {
 
                     <button 
                         onClick={() => setIsCloudSetupOpen(true)}
-                        className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 dark:text-slate-400"
+                        className={`w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium border ${!cloudConfig?.scriptUrl ? 'bg-amber-50 text-amber-600 border-amber-200 animate-pulse' : 'text-slate-500 hover:bg-slate-100 border-transparent'}`}
                     >
-                        <Cloud size={14} /> Drive Ayarları
+                        <Cloud size={14} /> 
+                        {!cloudConfig?.scriptUrl ? 'Bulut Kurulumu Yap' : 'Drive Ayarları'}
                     </button>
                  </>
              )}
@@ -758,17 +763,20 @@ function App() {
 
       {/* Mobile Top Bar */}
       <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 flex justify-between items-center transition-colors duration-300">
-         <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2">
-            <Package className="fill-blue-600 text-white" size={24} />
-            <span className="dark:text-white text-slate-800">DepoPro</span>
-        </h1>
+         <div>
+            <h1 className="text-xl font-bold text-blue-600 flex items-center gap-2">
+                <Package className="fill-blue-600 text-white" size={24} />
+                <span className="dark:text-white text-slate-800">DepoPro</span>
+            </h1>
+            <p className="text-[10px] text-slate-400 pl-1">v{APP_VERSION}</p>
+         </div>
         <div className="flex items-center gap-3">
-             {currentUser.role === 'ADMIN' && cloudConfig?.scriptUrl && (
-                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-1">
+             {currentUser.role === 'ADMIN' && (
+                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-1" onClick={() => !cloudConfig?.scriptUrl && setIsCloudSetupOpen(true)}>
                     {syncStatus === 'SYNCING' ? <Loader2 size={14} className="animate-spin text-blue-500" /> : 
                      syncStatus === 'SUCCESS' ? <CheckCircle2 size={14} className="text-green-500" /> :
                      syncStatus === 'ERROR' ? <WifiOff size={14} className="text-red-500" /> :
-                     <Cloud size={14} className="text-slate-400" />
+                     cloudConfig?.scriptUrl ? <Cloud size={14} className="text-blue-500" /> : <Cloud size={14} className="text-slate-300" />
                     }
                  </div>
              )}
@@ -804,9 +812,9 @@ function App() {
                             ) : (
                                 <button 
                                     onClick={() => setIsCloudSetupOpen(true)}
-                                    className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium"
+                                    className="bg-amber-100 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1 animate-pulse"
                                 >
-                                    <Cloud size={18} />
+                                    <Cloud size={18} /> Bağla
                                 </button>
                             )}
                         </div>
@@ -843,6 +851,8 @@ function App() {
                     onScan={handleGlobalScanClick}
                     onReportSent={handleReportSent}
                     currentUser={currentUser}
+                    isCloudEnabled={!!cloudConfig?.scriptUrl}
+                    onOpenCloudSetup={() => setIsCloudSetupOpen(true)}
                 />
             )}
             {currentView === 'ANALYTICS' && (
