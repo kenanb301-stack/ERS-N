@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw, CheckCircle2, Loader2, WifiOff } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -55,7 +55,9 @@ function App() {
       return saved ? JSON.parse(saved) : null;
   });
 
-  const [isSyncing, setIsSyncing] = useState(false);
+  // SYNC STATES
+  const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   
@@ -86,17 +88,6 @@ function App() {
     return saved ? JSON.parse(saved) : true;
   });
 
-  // 3. Centralized Save Function (WRITE)
-  const saveData = (newProducts: Product[], newTransactions: Transaction[]) => {
-      // 1. Update React State (Instant UI update)
-      setProducts(newProducts);
-      setTransactions(newTransactions);
-
-      // 2. Update LocalStorage (Backup)
-      localStorage.setItem('depopro_products', JSON.stringify(newProducts));
-      localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
-  };
-
   // --- APP EFFECTS ---
 
   useEffect(() => {
@@ -117,6 +108,23 @@ function App() {
     }
   }, [currentUser]);
 
+  // --- AUTOMATIC CLOUD SYNC EFFECTS ---
+  
+  // 1. Initial Load & Periodic Polling
+  useEffect(() => {
+      if (cloudConfig?.scriptUrl && currentUser) {
+          // App açılışında otomatik çek
+          performCloudLoad(true);
+
+          // Her 60 saniyede bir arka planda kontrol et
+          const intervalId = setInterval(() => {
+              performCloudLoad(true);
+          }, 60000);
+
+          return () => clearInterval(intervalId);
+      }
+  }, [cloudConfig?.scriptUrl, currentUser]);
+
   const handleLogin = (user: User) => {
     setCurrentUser(user);
   };
@@ -131,48 +139,88 @@ function App() {
   // Check for negative stock
   const hasNegativeStock = products.some(p => p.current_stock < 0);
 
-  // --- CLOUD SYNC LOGIC (GOOGLE SHEETS) ---
+  // --- CLOUD OPERATIONS ---
+
   const handleSaveCloudConfig = (url: string) => {
       const newConfig = { scriptUrl: url };
       setCloudConfig(newConfig);
       localStorage.setItem('depopro_cloud_config', JSON.stringify(newConfig));
+      // Config kaydedilince hemen bir çekme işlemi yap
+      setTimeout(() => performCloudLoad(false), 500);
   };
 
-  const handleCloudUpload = async () => {
-      if (!cloudConfig?.scriptUrl) {
-          setIsCloudSetupOpen(true);
-          return;
+  // Centralized Save Function (Write to Local + Trigger Cloud)
+  const saveData = (newProducts: Product[], newTransactions: Transaction[]) => {
+      // 1. Update React State (Instant UI update)
+      setProducts(newProducts);
+      setTransactions(newTransactions);
+
+      // 2. Update LocalStorage (Backup)
+      localStorage.setItem('depopro_products', JSON.stringify(newProducts));
+      localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
+
+      // 3. Trigger Auto Cloud Sync (Fire and forget)
+      if (cloudConfig?.scriptUrl) {
+          performCloudSave(newProducts, newTransactions);
       }
-      
-      setIsSyncing(true);
-      const result = await saveToCloud(cloudConfig.scriptUrl, {
-          products,
-          transactions,
-          lastUpdated: new Date().toISOString()
-      });
-      setIsSyncing(false);
-      
-      alert(result.message);
   };
 
-  const handleCloudDownload = async () => {
-       if (!cloudConfig?.scriptUrl) {
-          setIsCloudSetupOpen(true);
-          return;
+  const performCloudSave = async (currentProducts: Product[], currentTransactions: Transaction[]) => {
+      if (!cloudConfig?.scriptUrl) return;
+
+      setSyncStatus('SYNCING');
+      try {
+          const result = await saveToCloud(cloudConfig.scriptUrl, {
+              products: currentProducts,
+              transactions: currentTransactions,
+              lastUpdated: new Date().toISOString()
+          });
+
+          if (result.success) {
+              setSyncStatus('SUCCESS');
+              setLastSyncTime(new Date().toLocaleTimeString());
+              // 3 saniye sonra success durumunu idle'a çek
+              setTimeout(() => setSyncStatus('IDLE'), 3000);
+          } else {
+              setSyncStatus('ERROR');
+          }
+      } catch (e) {
+          setSyncStatus('ERROR');
+          console.error(e);
       }
+  };
 
-      if (!confirm("Buluttaki veriler cihazınızdaki verilerin üzerine yazılacak. Onaylıyor musunuz?")) return;
+  const performCloudLoad = async (silent: boolean = false) => {
+       if (!cloudConfig?.scriptUrl) return;
 
-      setIsSyncing(true);
-      const result = await loadFromCloud(cloudConfig.scriptUrl);
-      setIsSyncing(false);
+       if (!silent) setSyncStatus('SYNCING');
 
-      if (result.success && result.data) {
-          saveData(result.data.products, result.data.transactions);
-          alert("Veriler başarıyla güncellendi.");
-      } else {
-          alert(result.message);
-      }
+       try {
+           const result = await loadFromCloud(cloudConfig.scriptUrl);
+           
+           if (result.success && result.data) {
+               // Gelen veriyi local state ile güncelle
+               // Not: Burada basit bir "son yazan kazanır" mantığı var.
+               // Gelişmiş versiyonlarda timestamp kontrolü yapılabilir.
+               setProducts(result.data.products);
+               setTransactions(result.data.transactions);
+               
+               // LocalStorage'ı da güncelle
+               localStorage.setItem('depopro_products', JSON.stringify(result.data.products));
+               localStorage.setItem('depopro_transactions', JSON.stringify(result.data.transactions));
+               
+               setSyncStatus('SUCCESS');
+               setLastSyncTime(new Date().toLocaleTimeString());
+               if (!silent) alert("Veriler güncellendi.");
+               setTimeout(() => setSyncStatus('IDLE'), 3000);
+           } else {
+               if (!silent) alert(result.message);
+               setSyncStatus('ERROR');
+           }
+       } catch (e) {
+           console.error(e);
+           setSyncStatus('ERROR');
+       }
   };
 
   // --- DATA SYNC LOGIC (FILE BACKUP) ---
@@ -639,25 +687,25 @@ function App() {
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
              {currentUser.role === 'ADMIN' && (
                  <>
-                    {/* Cloud Sync Buttons */}
-                    <div className="grid grid-cols-2 gap-2">
+                    {/* Cloud Status */}
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-700/50">
+                        <div className="flex items-center gap-2">
+                            {syncStatus === 'SYNCING' && <Loader2 size={16} className="text-blue-500 animate-spin" />}
+                            {syncStatus === 'SUCCESS' && <CheckCircle2 size={16} className="text-green-500" />}
+                            {syncStatus === 'ERROR' && <WifiOff size={16} className="text-red-500" />}
+                            {syncStatus === 'IDLE' && <Cloud size={16} className="text-slate-400" />}
+                            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                                {syncStatus === 'SYNCING' ? 'Eşitleniyor...' : 
+                                 syncStatus === 'SUCCESS' ? 'Eşitlendi' :
+                                 syncStatus === 'ERROR' ? 'Hata' : 'Otomatik'}
+                            </span>
+                        </div>
                         <button 
-                            onClick={handleCloudUpload}
-                            disabled={isSyncing}
-                            className="flex flex-col items-center justify-center p-2 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs font-bold transition-all disabled:opacity-50"
-                            title="Buluta Yükle"
+                            onClick={() => performCloudLoad(false)}
+                            disabled={syncStatus === 'SYNCING'}
+                            title="Zorla Eşitle"
                         >
-                            <UploadCloud size={20} className="mb-1" />
-                            {isSyncing ? '...' : 'Yükle'}
-                        </button>
-                        <button 
-                            onClick={handleCloudDownload}
-                            disabled={isSyncing}
-                            className="flex flex-col items-center justify-center p-2 rounded-xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 text-purple-600 dark:text-purple-400 text-xs font-bold transition-all disabled:opacity-50"
-                            title="Buluttan İndir"
-                        >
-                            <DownloadCloud size={20} className="mb-1" />
-                            {isSyncing ? '...' : 'İndir'}
+                            <RefreshCw size={14} className={`text-slate-400 hover:text-blue-500 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
                         </button>
                     </div>
 
@@ -715,15 +763,15 @@ function App() {
             <span className="dark:text-white text-slate-800">DepoPro</span>
         </h1>
         <div className="flex items-center gap-3">
-            {currentUser.role === 'ADMIN' && (
-                <button 
-                    onClick={handleCloudDownload}
-                    className="p-2 text-purple-600 bg-purple-50 dark:bg-purple-900/20 rounded-lg active:scale-95"
-                    title="Buluttan Çek"
-                >
-                    <DownloadCloud size={20} />
-                </button>
-            )}
+             {currentUser.role === 'ADMIN' && cloudConfig?.scriptUrl && (
+                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-1">
+                    {syncStatus === 'SYNCING' ? <Loader2 size={14} className="animate-spin text-blue-500" /> : 
+                     syncStatus === 'SUCCESS' ? <CheckCircle2 size={14} className="text-green-500" /> :
+                     syncStatus === 'ERROR' ? <WifiOff size={14} className="text-red-500" /> :
+                     <Cloud size={14} className="text-slate-400" />
+                    }
+                 </div>
+             )}
             <button onClick={handleLogout} className="p-2 text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg">
                 <LogOut size={20} />
             </button>
@@ -746,18 +794,21 @@ function App() {
                     <div className="flex gap-2">
                         {/* Mobile Only Extra Sync Buttons */}
                         <div className="md:hidden flex gap-2">
-                            <button 
-                                onClick={handleCloudUpload}
-                                className="bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
-                            >
-                                <UploadCloud size={18} /> Yükle
-                            </button>
-                             <button 
-                                onClick={() => setIsCloudSetupOpen(true)}
-                                className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium"
-                            >
-                                <Cloud size={18} />
-                            </button>
+                            {cloudConfig?.scriptUrl ? (
+                                <button 
+                                    onClick={() => performCloudLoad(false)}
+                                    className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1"
+                                >
+                                    <RefreshCw size={16} /> Güncelle
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={() => setIsCloudSetupOpen(true)}
+                                    className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium"
+                                >
+                                    <Cloud size={18} />
+                                </button>
+                            )}
                         </div>
 
                         {currentView === 'INVENTORY' && (
