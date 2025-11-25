@@ -13,10 +13,15 @@ interface ErrorBoundaryState {
 
 // Hata Sınırı Bileşeni (React Error Boundary)
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    error: null
-  };
+  public state: ErrorBoundaryState;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null
+    };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
@@ -32,7 +37,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
         <div style={{ padding: '20px', textAlign: 'center', marginTop: '50px' }}>
           <h1 style={{ color: '#ef4444' }}>Bir şeyler yanlış gitti.</h1>
           <p>Uygulama yüklenirken bir hata oluştu.</p>
-          <pre style={{ background: '#f1f5f9', padding: '10px', borderRadius: '5px', overflowX: 'auto', textAlign: 'left', maxWidth: '600px', margin: '20px auto' }}>
+          <pre style={{ background: '#f1f5f9', padding: '10px', borderRadius: '5px', overflowX: 'auto', textAlign: 'left', maxWidth: '600px', margin: '20px auto', fontSize: '12px' }}>
             {this.state.error?.toString()}
           </pre>
           <button 

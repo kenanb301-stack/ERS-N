@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, Printer, MapPin, Hexagon, LayoutGrid } from 'lucide-react';
+import { Search, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, Printer, MapPin, Hexagon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Product, User } from '../types';
 
 interface InventoryListProps {
@@ -13,9 +13,12 @@ interface InventoryListProps {
   currentUser: User;
 }
 
+const ITEMS_PER_PAGE = 50;
+
 const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdit, onAddProduct, onBulkAdd, onPrintBarcodes, currentUser }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
@@ -29,6 +32,17 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
       return matchesSearch;
     });
   }, [products, searchTerm]);
+
+  // Reset page when search changes
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
+  const currentData = filteredProducts.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const getStockStatusColor = (current: number, min: number) => {
     if (current === 0) return 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600';
@@ -92,7 +106,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
         </button>
       </div>
 
-      {/* Product List - Responsive */}
+      {/* Product List */}
       <div className="grid gap-3">
         {filteredProducts.length === 0 ? (
           <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
@@ -111,7 +125,7 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
             )}
           </div>
         ) : (
-          filteredProducts.map(product => (
+          currentData.map(product => (
             <div 
               key={product.id} 
               className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-md transition-all relative group"
@@ -227,6 +241,29 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
           ))
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {filteredProducts.length > ITEMS_PER_PAGE && (
+        <div className="flex justify-center items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-700">
+            <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg border border-slate-200 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+                <ChevronLeft size={20} className="text-slate-600 dark:text-slate-300" />
+            </button>
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                Sayfa {currentPage} / {totalPages}
+            </span>
+            <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg border border-slate-200 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+                <ChevronRight size={20} className="text-slate-600 dark:text-slate-300" />
+            </button>
+        </div>
+      )}
     </div>
   );
 };

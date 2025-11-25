@@ -153,21 +153,30 @@ function App() {
 
   // Centralized Save Function (Write to Local + Trigger Cloud)
   const saveData = (newProducts: Product[], newTransactions: Transaction[]) => {
-      // 1. Update React State (Instant UI update)
-      setProducts(newProducts);
-      setTransactions(newTransactions);
+      const now = new Date().toISOString();
+      localStorage.setItem('depopro_last_updated', now); // Update local timestamp immediately
 
-      // 2. Update LocalStorage (Backup)
-      localStorage.setItem('depopro_products', JSON.stringify(newProducts));
-      localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
+      try {
+        // 1. Update React State (Instant UI update)
+        setProducts(newProducts);
+        setTransactions(newTransactions);
+
+        // 2. Update LocalStorage (Backup)
+        localStorage.setItem('depopro_products', JSON.stringify(newProducts));
+        localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
+      } catch (err) {
+        console.error("LocalStorage Save Error:", err);
+        alert("HATA: Veriler tarayıcı hafızasına yazılamadı. Cihaz hafızası dolmuş olabilir. Lütfen bazı gereksiz uygulamaları kapatın veya temizleyin.");
+        return;
+      }
 
       // 3. Trigger Auto Cloud Sync (Fire and forget)
       if (cloudConfig?.scriptUrl) {
-          performCloudSave(newProducts, newTransactions);
+          performCloudSave(newProducts, newTransactions, now);
       }
   };
 
-  const performCloudSave = async (currentProducts: Product[], currentTransactions: Transaction[]) => {
+  const performCloudSave = async (currentProducts: Product[], currentTransactions: Transaction[], timestamp: string) => {
       if (!cloudConfig?.scriptUrl) return;
 
       setSyncStatus('SYNCING');
@@ -175,7 +184,7 @@ function App() {
           const result = await saveToCloud(cloudConfig.scriptUrl, {
               products: currentProducts,
               transactions: currentTransactions,
-              lastUpdated: new Date().toISOString()
+              lastUpdated: timestamp
           });
 
           if (result.success) {
@@ -201,15 +210,28 @@ function App() {
            const result = await loadFromCloud(cloudConfig.scriptUrl);
            
            if (result.success && result.data) {
+               // TIMESTAMP CHECK
+               const localLastUpdate = localStorage.getItem('depopro_last_updated');
+               const cloudLastUpdate = result.data.lastUpdated;
+
+               // If local data exists and is NEWER than cloud data, DO NOT OVERWRITE
+               if (localLastUpdate && cloudLastUpdate && new Date(localLastUpdate) > new Date(cloudLastUpdate)) {
+                   console.log("Local data is newer than cloud data. Skipping overwrite to prevent data loss.");
+                   if (!silent) setSyncStatus('SUCCESS'); // It's technically success, we just chose not to sync
+                   return;
+               }
+
                // Gelen veriyi local state ile güncelle
-               // Not: Burada basit bir "son yazan kazanır" mantığı var.
-               // Gelişmiş versiyonlarda timestamp kontrolü yapılabilir.
                setProducts(result.data.products);
                setTransactions(result.data.transactions);
                
                // LocalStorage'ı da güncelle
                localStorage.setItem('depopro_products', JSON.stringify(result.data.products));
                localStorage.setItem('depopro_transactions', JSON.stringify(result.data.transactions));
+               // Sync local timestamp to match cloud
+               if (cloudLastUpdate) {
+                   localStorage.setItem('depopro_last_updated', cloudLastUpdate);
+               }
                
                setSyncStatus('SUCCESS');
                setLastSyncTime(new Date().toLocaleTimeString());
