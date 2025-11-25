@@ -24,7 +24,8 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
                             (product.part_code && product.part_code.toLowerCase().includes(term)) ||
                             (product.location && product.location.toLowerCase().includes(term)) ||
                             (product.material && product.material.toLowerCase().includes(term)) ||
-                            (product.barcode && product.barcode.includes(term));
+                            (product.barcode && product.barcode.includes(term)) ||
+                            (product.id && product.id.toLowerCase() === term); // Exact match for ID scan
       return matchesSearch;
     });
   }, [products, searchTerm]);

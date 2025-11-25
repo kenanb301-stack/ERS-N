@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2, ScanLine, Hash } from 'lucide-react';
 import { Product, Transaction, TransactionType } from '../types';
@@ -91,7 +92,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const filteredProducts = products.filter(p => 
     (p.part_code && p.part_code.toLowerCase().includes(searchTerm.toLowerCase())) ||
     p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (p.barcode && p.barcode.includes(searchTerm))
+    (p.barcode && p.barcode.includes(searchTerm)) ||
+    (p.id && p.id === searchTerm) // Allow manual entry of ID
   );
 
   const handleProductSelect = (product: Product) => {
@@ -107,8 +109,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       setScannedBarcode(code);
       // Normalize code
       const searchCode = code.trim();
-      // Find product by barcode OR part code
-      const product = products.find(p => (p.barcode === searchCode) || (p.part_code === searchCode));
+      // Find product by barcode OR part code OR internal ID (for Short Codes)
+      const product = products.find(p => 
+          (p.barcode === searchCode) || 
+          (p.part_code === searchCode) || 
+          (p.id === searchCode)
+      );
       
       if (product) {
           handleProductSelect(product);

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { X, Printer, CheckSquare, Square, AlertCircle, Search, Filter, Check } from 'lucide-react';
+import { X, Printer, CheckSquare, Square, AlertCircle, Search, Filter, Check, Settings2, ShieldCheck, MapPin, BarChartHorizontal } from 'lucide-react';
 import { Product } from '../types';
 import JsBarcode from 'jsbarcode';
 
@@ -10,14 +10,20 @@ interface BarcodePrinterModalProps {
   products: Product[];
 }
 
+type BarcodeSource = 'PART_CODE' | 'ID' | 'LOCATION';
+
 const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClose, products }) => {
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [barcodeImages, setBarcodeImages] = useState<Record<string, string>>({});
   const [isGenerating, setIsGenerating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Settings
+  const [barcodeSource, setBarcodeSource] = useState<BarcodeSource>('PART_CODE');
+  const [barcodeWidth, setBarcodeWidth] = useState<number>(2); // 1 = Narrow, 2 = Standard
 
-  // Products that have a barcode value
-  const validProducts = products.filter(p => (p.barcode && p.barcode.trim().length > 0) || (p.part_code && p.part_code.trim().length > 0));
+  // Products that are valid candidates for printing
+  const validProducts = products;
 
   // Filtered products based on search
   const filteredProducts = validProducts.filter(p => 
@@ -33,42 +39,70 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
       setSelectedProductIds(new Set());
       setSearchTerm('');
       
-      // Generate barcodes for ALL valid products immediately using an in-memory canvas
-      setIsGenerating(true);
+      // Default settings
+      setBarcodeSource('PART_CODE');
+      setBarcodeWidth(2);
       
-      const timer = setTimeout(() => {
-          const newImages: Record<string, string> = {};
-          const canvas = document.createElement('canvas'); // Off-screen canvas
-          
-          validProducts.forEach(product => {
-              try {
-                  const codeToUse = product.barcode || product.part_code;
-                  if (codeToUse) {
-                      JsBarcode(canvas, codeToUse, {
-                          format: "CODE128",
-                          lineColor: "#000",
-                          width: 2,
-                          height: 50,
-                          displayValue: true,
-                          fontSize: 14,
-                          textMargin: 2,
-                          margin: 0,
-                          background: "#ffffff"
-                      });
-                      newImages[product.id] = canvas.toDataURL("image/png");
-                  }
-              } catch (e) {
-                  console.error(`Barcode generation failed for ${product.product_name}`, e);
-              }
-          });
-          
-          setBarcodeImages(newImages);
-          setIsGenerating(false);
-      }, 100);
-
-      return () => clearTimeout(timer);
+      regenerateBarcodes();
     }
   }, [isOpen, products]);
+
+  // Regenerate when settings change
+  useEffect(() => {
+    if (isOpen) {
+        regenerateBarcodes();
+    }
+  }, [barcodeSource, barcodeWidth]);
+
+  const regenerateBarcodes = () => {
+    setIsGenerating(true);
+      
+    const timer = setTimeout(() => {
+        const newImages: Record<string, string> = {};
+        const canvas = document.createElement('canvas'); // Off-screen canvas
+        
+        validProducts.forEach(product => {
+            try {
+                let codeToUse = "";
+                
+                if (barcodeSource === 'ID') {
+                    codeToUse = product.id;
+                } else if (barcodeSource === 'LOCATION') {
+                    codeToUse = product.location || "";
+                } else {
+                    // Default to Part Code, fallback to barcode field, fallback to ID
+                    codeToUse = product.part_code || product.barcode || product.id;
+                }
+
+                if (codeToUse) {
+                    // Temizle
+                    const ctx = canvas.getContext('2d');
+                    ctx?.clearRect(0,0, canvas.width, canvas.height);
+
+                    JsBarcode(canvas, codeToUse, {
+                        format: "CODE128",
+                        lineColor: "#000",
+                        width: barcodeWidth, // Dynamic Width
+                        height: 50,
+                        displayValue: true, // Show the code below bars
+                        fontSize: 12,
+                        textMargin: 2,
+                        margin: 10,
+                        background: "#ffffff"
+                    });
+                    newImages[product.id] = canvas.toDataURL("image/png");
+                }
+            } catch (e) {
+                console.warn(`Barcode generation skipped for ${product.product_name}:`, e);
+            }
+        });
+        
+        setBarcodeImages(newImages);
+        setIsGenerating(false);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  };
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedProductIds);
@@ -177,6 +211,56 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
           </button>
         </div>
 
+        {/* Configuration Bar */}
+        <div className="p-3 bg-blue-50 dark:bg-blue-900/10 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row gap-4 items-center justify-between text-sm">
+             <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto">
+                 <div className="flex items-center gap-2 whitespace-nowrap">
+                     <Settings2 size={16} className="text-blue-600 dark:text-blue-400" />
+                     <span className="font-bold text-slate-700 dark:text-slate-300">Ayarlar:</span>
+                 </div>
+                 
+                 <div className="flex items-center gap-2">
+                     <span className="text-slate-600 dark:text-slate-400">Veri Kaynağı:</span>
+                     <select 
+                        value={barcodeSource}
+                        onChange={(e) => setBarcodeSource(e.target.value as BarcodeSource)}
+                        className="p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-xs font-medium"
+                     >
+                         <option value="PART_CODE">Parça Kodu (Varsayılan)</option>
+                         <option value="ID">Kısa Kod (Sistem ID)</option>
+                         <option value="LOCATION">Reyon Kodu</option>
+                     </select>
+                 </div>
+
+                 <div className="flex items-center gap-2">
+                     <span className="text-slate-600 dark:text-slate-400">Çizgi Genişliği:</span>
+                     <div className="flex bg-white dark:bg-slate-700 rounded border border-slate-300 dark:border-slate-600 p-0.5">
+                        <button 
+                            onClick={() => setBarcodeWidth(1.5)}
+                            className={`px-2 py-0.5 text-xs rounded transition-colors ${barcodeWidth === 1.5 ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500'}`}
+                            title="Sıkışık (Uzun kodlar için)"
+                        >
+                            Dar
+                        </button>
+                        <button 
+                            onClick={() => setBarcodeWidth(2)}
+                            className={`px-2 py-0.5 text-xs rounded transition-colors ${barcodeWidth === 2 ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500'}`}
+                            title="Standart"
+                        >
+                            Orta
+                        </button>
+                     </div>
+                 </div>
+             </div>
+             
+             {/* Info Tip */}
+             <div className="hidden lg:flex items-center gap-2 text-xs text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-lg border border-amber-100 dark:border-amber-900/30">
+                 {barcodeSource === 'PART_CODE' && "Uzun parça kodları sığmıyorsa 'Kısa Kod' veya 'Dar' seçin."}
+                 {barcodeSource === 'ID' && <><ShieldCheck size={14}/> Sistem ID'si kısadır ve her zaman sığar. Önerilir.</>}
+                 {barcodeSource === 'LOCATION' && <><MapPin size={14}/> Dikkat: Reyon barkodu benzersiz ürün tanımlamaz.</>}
+             </div>
+        </div>
+
         {/* Search and Filters Bar */}
         <div className="p-4 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
@@ -266,7 +350,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
 
                                 {/* Card Content (Mimics Label) */}
                                 <div className="flex-1 flex flex-col p-3 items-center justify-center bg-white">
-                                    <div className="w-full flex justify-between items-center mb-2 px-1">
+                                    <div className="w-full flex justify-between items-center mb-1 px-1">
                                         <span className={`font-mono font-black text-slate-800 leading-none truncate ${product.part_code && product.part_code.length > 10 ? 'text-xs' : 'text-sm'}`}>
                                             {product.part_code || 'KODSUZ'}
                                         </span>
@@ -277,15 +361,15 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                                         )}
                                     </div>
                                     
-                                    <div className="flex-1 w-full flex items-center justify-center bg-slate-50 rounded-lg p-2">
+                                    <div className="flex-1 w-full flex items-center justify-center bg-slate-50 rounded-lg p-1 overflow-hidden">
                                         {imgSrc ? (
                                             <img src={imgSrc} alt="barcode" className="max-w-full max-h-full object-contain mix-blend-multiply" />
                                         ) : (
-                                            <span className="text-[10px] text-red-400">Hata</span>
+                                            <span className="text-[10px] text-red-400">Veri Yok</span>
                                         )}
                                     </div>
                                     
-                                    <div className="w-full mt-2 text-center">
+                                    <div className="w-full mt-1 text-center">
                                          <p className="text-[10px] text-slate-500 truncate w-full px-2">
                                              {product.product_name}
                                          </p>
@@ -309,7 +393,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         {validProducts.filter(p => selectedProductIds.has(p.id)).map(product => (
             <div key={`print-${product.id}`} className="label-container">
                 <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2mm' }}>
-                    <span style={{ fontSize: '20pt', fontWeight: '900', fontFamily: 'monospace', letterSpacing: '-1.5px', lineHeight: '0.9' }}>
+                    <span style={{ fontSize: product.part_code && product.part_code.length > 12 ? '16pt' : '20pt', fontWeight: '900', fontFamily: 'monospace', letterSpacing: '-1.5px', lineHeight: '0.9' }}>
                         {product.part_code || ''}
                     </span>
                     <span style={{ fontSize: '11pt', fontWeight: 'bold', border: '2px solid black', padding: '1px 4px', borderRadius: '4px' }}>
@@ -317,7 +401,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                     </span>
                 </div>
                 
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', flex: 1, overflow: 'hidden' }}>
                     {barcodeImages[product.id] ? (
                          <img 
                             src={barcodeImages[product.id]}
@@ -327,6 +411,11 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                     ) : (
                         <div style={{ fontSize: '8pt' }}>Yükleniyor...</div>
                     )}
+                </div>
+                
+                {/* Alt Metin (Sadece ID kullanılıyorsa, okumak için ürün adını biraz daha belirgin yapabiliriz) */}
+                <div style={{fontSize: '9pt', whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: '100%', marginTop: '1mm'}}>
+                    {product.product_name}
                 </div>
             </div>
         ))}
