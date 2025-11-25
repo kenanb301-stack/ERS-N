@@ -111,8 +111,8 @@ function doPost(e) {
                     <div className="space-y-1">
                         <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 2: Yayınlama (Çok Önemli)</span>
                         <ul className="list-decimal pl-5 space-y-1">
-                            <li>Sağ üstteki mavi <strong>Dağıt (Deploy)</strong> butonuna bas -> <strong>Yeni Dağıtım (New Deployment)</strong> seç.</li>
-                            <li>Sol üstteki "Tür seçin" çark simgesine tıkla -> <strong>Web Uygulaması</strong> seç.</li>
+                            <li>Sağ üstteki mavi <strong>Dağıt (Deploy)</strong> butonuna bas &rarr; <strong>Yeni Dağıtım (New Deployment)</strong> seç.</li>
+                            <li>Sol üstteki "Tür seçin" çark simgesine tıkla &rarr; <strong>Web Uygulaması</strong> seç.</li>
                             <li><span className="text-red-500 font-bold">Erişimi olanlar (Who has access):</span> Mutlaka <strong>"Herkes" (Anyone)</strong> seçilmeli.</li>
                             <li>Dağıt butonuna bas.</li>
                         </ul>
