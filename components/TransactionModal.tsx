@@ -93,12 +93,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     (p.part_code && p.part_code.toLowerCase().includes(searchTerm.toLowerCase())) ||
     p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (p.barcode && p.barcode.includes(searchTerm)) ||
-    (p.id && p.id === searchTerm) // Allow manual entry of ID
+    (p.id && p.id === searchTerm) ||
+    (p.location && p.location.toLowerCase().includes(searchTerm.toLowerCase())) // Allow finding by typing location
   );
 
   const handleProductSelect = (product: Product) => {
     setProductId(product.id);
-    // Input'a Parça Kodunu yazıyoruz
+    // Input'a Parça Kodunu yazıyoruz (Kullanıcı Reyon barkodu okutsa bile buraya Parça Kodu gelir)
     setSearchTerm(product.part_code || product.product_name);
     setScannedBarcode(product.barcode || '');
     setIsDropdownOpen(false);
@@ -109,11 +110,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       setScannedBarcode(code);
       // Normalize code
       const searchCode = code.trim();
-      // Find product by barcode OR part code OR internal ID (for Short Codes)
+      
+      // Find product by:
+      // 1. Barcode field
+      // 2. Part Code
+      // 3. System ID
+      // 4. LOCATION (Reyon) - YENİ ÖZELLİK
       const product = products.find(p => 
           (p.barcode === searchCode) || 
           (p.part_code === searchCode) || 
-          (p.id === searchCode)
+          (p.id === searchCode) ||
+          (p.location === searchCode) // <--- Reyon eşleşmesi eklendi
       );
       
       if (product) {
@@ -124,8 +131,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
           setTimeout(() => document.getElementById('quantityInput')?.focus(), 100);
       } else {
           setError(`"${code}" kodlu ürün bulunamadı.`);
+          // Eğer bulunamazsa arama kutusuna okunan kodu yaz ki kullanıcı görsün
           setProductId('');
-          setSearchTerm('');
+          setSearchTerm(code);
           setQuantity('');
       }
   };
