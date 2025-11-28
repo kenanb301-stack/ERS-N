@@ -7,6 +7,35 @@ interface SyncData {
   lastUpdated: string;
 }
 
+export const createBin = async (apiKey: string, data: SyncData): Promise<{ success: boolean; binId?: string; message: string }> => {
+  try {
+    const response = await fetch('https://api.jsonbin.io/v3/b', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': apiKey,
+        'X-Bin-Name': 'DepoPro_DB',
+        'X-Bin-Private': 'true'
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+        if (response.status === 401) {
+            return { success: false, message: 'API Key geçersiz.' };
+        }
+        return { success: false, message: `Oluşturma Hatası: ${response.statusText}` };
+    }
+
+    const result = await response.json();
+    return { success: true, binId: result.metadata.id, message: 'Bin başarıyla oluşturuldu.' };
+
+  } catch (error) {
+    console.error("Cloud Create Error:", error);
+    return { success: false, message: 'Bağlantı hatası.' };
+  }
+};
+
 export const saveToCloud = async (apiKey: string, binId: string, data: SyncData): Promise<{ success: boolean; message: string }> => {
   try {
     const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
@@ -22,6 +51,9 @@ export const saveToCloud = async (apiKey: string, binId: string, data: SyncData)
     if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
             return { success: false, message: 'Yetkisiz Erişim: API Key veya Bin ID hatalı.' };
+        }
+        if (response.status === 404) {
+            return { success: false, message: 'Bin ID bulunamadı (Silinmiş olabilir).' };
         }
         return { success: false, message: `Hata: ${response.statusText}` };
     }
@@ -45,6 +77,9 @@ export const loadFromCloud = async (apiKey: string, binId: string): Promise<{ su
     if (!response.ok) {
          if (response.status === 401 || response.status === 403) {
             return { success: false, message: 'Yetkisiz Erişim: API Key veya Bin ID hatalı.' };
+        }
+        if (response.status === 404) {
+            return { success: false, message: 'Bin ID bulunamadı.' };
         }
         return { success: false, message: `Hata: ${response.statusText}` };
     }

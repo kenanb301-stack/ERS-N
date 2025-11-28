@@ -1,7 +1,9 @@
 
 import React, { useState } from 'react';
-import { X, Cloud, Save, Key, Database, CheckCircle, HelpCircle, ExternalLink, ShieldCheck } from 'lucide-react';
+import { X, Cloud, Save, Key, Database, CheckCircle, HelpCircle, ExternalLink, ShieldCheck, Zap, Loader2 } from 'lucide-react';
 import { CloudConfig } from '../types';
+import { createBin } from '../services/jsonbin';
+import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from '../constants';
 
 interface CloudSetupModalProps {
   isOpen: boolean;
@@ -14,6 +16,7 @@ const CloudSetupModal: React.FC<CloudSetupModalProps> = ({ isOpen, onClose, onSa
   const [apiKey, setApiKey] = useState(currentConfig?.apiKey || '');
   const [binId, setBinId] = useState(currentConfig?.binId || '');
   const [showGuide, setShowGuide] = useState(!currentConfig?.apiKey);
+  const [isCreating, setIsCreating] = useState(false);
 
   if (!isOpen) return null;
 
@@ -24,6 +27,33 @@ const CloudSetupModal: React.FC<CloudSetupModalProps> = ({ isOpen, onClose, onSa
     }
     onSave(apiKey.trim(), binId.trim());
     onClose();
+  };
+
+  const handleAutoCreate = async () => {
+      if (!apiKey.trim()) {
+          alert("Lütfen önce API Key alanını doldurun.");
+          return;
+      }
+
+      setIsCreating(true);
+      
+      // Create empty initial data structure
+      const initialData = {
+          products: INITIAL_PRODUCTS,
+          transactions: INITIAL_TRANSACTIONS,
+          lastUpdated: new Date().toISOString()
+      };
+
+      const result = await createBin(apiKey.trim(), initialData);
+
+      setIsCreating(false);
+
+      if (result.success && result.binId) {
+          setBinId(result.binId);
+          alert("Bin başarıyla oluşturuldu! ID otomatik olarak kutuya yazıldı. Şimdi 'Bağlan ve Kaydet' butonuna basın.");
+      } else {
+          alert(`Hata: ${result.message}\nLütfen API Key'in doğru olduğundan emin olun.`);
+      }
   };
 
   return (
@@ -44,88 +74,68 @@ const CloudSetupModal: React.FC<CloudSetupModalProps> = ({ isOpen, onClose, onSa
             
             <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800">
                 <h3 className="font-bold text-indigo-800 dark:text-indigo-300 text-sm mb-2 flex items-center gap-2">
-                    <ShieldCheck size={16} /> JSONBin Nedir?
+                    <ShieldCheck size={16} /> En Kolay Yöntem
                 </h3>
                 <p className="text-sm text-indigo-700 dark:text-indigo-200 opacity-90">
-                    Verilerinizi Google Sheets yerine profesyonel bir JSON veritabanında saklar. Daha hızlıdır, limit sorunu yoktur ve kopma yapmaz.
+                    Sadece API Key alın, gerisini uygulamaya bırakın. Sitede dosya oluşturmanıza gerek yoktur.
                 </p>
             </div>
 
-            <button 
-                onClick={() => setShowGuide(!showGuide)}
-                className="w-full flex items-center justify-between p-3 bg-slate-100 dark:bg-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-            >
-                <span className="flex items-center gap-2"><HelpCircle size={16}/> Kurulum Rehberi (Çok Kolay)</span>
-                <span>{showGuide ? 'Gizle' : 'Göster'}</span>
-            </button>
-
-            {showGuide && (
-                <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300 border-l-2 border-slate-200 dark:border-slate-600 pl-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-r-lg">
-                    <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 1: Kayıt Ol</span>
-                        <a href="https://jsonbin.io/login" target="_blank" className="text-blue-600 hover:underline inline-flex items-center gap-1 font-bold">
-                            jsonbin.io <ExternalLink size={12}/>
-                        </a> adresine gidin ve Google ile giriş yapın.
-                    </div>
-
-                    <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 2: API Key Al</span>
-                        <p>Giriş yaptıktan sonra sayfanın en üstündeki sarı/profil başlığında <strong>"Copy Master Key"</strong> butonuna basın. Kopyaladığınız kodu aşağıdaki <strong>API Key</strong> kutusuna yapıştırın.</p>
-                    </div>
-
-                    <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 3: Bin (Depo) Oluştur</span>
-                        <p>Sitede <strong>"+ Create New"</strong> butonuna basın. Editör açılacaktır.</p>
-                        <p>Editörün içine sadece iki süslü parantez <code>{'{}'}</code> yazın ve <strong>Create</strong> butonuna basın.</p>
-                    </div>
-
-                    <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 4: Bin ID Al</span>
-                        <p>Oluşturduktan sonra üst kısımda (Metadata başlığı altında) <strong>"Bin ID"</strong> yazar (Örn: <code>65a...</code>). Onu kopyalayın ve aşağıdaki <strong>Bin ID</strong> kutusuna yapıştırın.</p>
-                    </div>
-                </div>
-            )}
-
-            <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-                
-                <div className="space-y-2">
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-200">
-                        Master API Key
+            <div className="space-y-4 pt-2">
+                {/* STEP 1 */}
+                <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+                        Adım 1: API Key Girin
                     </label>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                        <a href="https://jsonbin.io/login" target="_blank" className="text-blue-600 hover:underline font-bold">jsonbin.io</a> adresine giriş yapın ve sarı başlıktaki <strong>"Copy Master Key"</strong> butonuna basın.
+                    </div>
                     <div className="relative">
                         <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input 
                             type="text" 
                             value={apiKey}
                             onChange={(e) => setApiKey(e.target.value)}
-                            placeholder="$2b$10$..."
-                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 outline-none font-mono text-xs sm:text-sm"
+                            placeholder="API Key buraya ($2b$10$...)"
+                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 outline-none font-mono text-xs sm:text-sm"
                         />
                     </div>
                 </div>
 
-                <div className="space-y-2">
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-200">
-                        Bin ID
+                {/* STEP 2 */}
+                <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <label className="block text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+                        Adım 2: Bin ID (Depo Kimliği)
                     </label>
-                    <div className="relative">
-                        <Database className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input 
-                            type="text" 
-                            value={binId}
-                            onChange={(e) => setBinId(e.target.value)}
-                            placeholder="65a..."
-                            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 outline-none font-mono text-xs sm:text-sm"
-                        />
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="relative flex-1">
+                            <Database className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input 
+                                type="text" 
+                                value={binId}
+                                onChange={(e) => setBinId(e.target.value)}
+                                placeholder="ID buraya gelecek..."
+                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 outline-none font-mono text-xs sm:text-sm"
+                            />
+                        </div>
+                        <button 
+                            onClick={handleAutoCreate}
+                            disabled={isCreating || !apiKey}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors text-sm"
+                        >
+                            {isCreating ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+                            Otomatik Oluştur
+                        </button>
                     </div>
+                    <p className="text-[10px] text-slate-500 mt-2">
+                        Eğer yeni başlıyorsanız <strong>"Otomatik Oluştur"</strong> butonuna basın. Eğer zaten bir ID'niz varsa (diğer cihazdan aldıysanız) kutuya yapıştırın.
+                    </p>
                 </div>
-
-                <p className="text-xs text-slate-400 font-bold mt-2">ÖNEMLİ: Bu iki kodu kopyalayın ve hem PC'de hem Mobilde aynı şekilde girin.</p>
             </div>
 
             <button 
                 onClick={handleSave}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none active:scale-95 transition-transform"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none active:scale-95 transition-transform"
             >
                 <Save size={20} />
                 Bağlan ve Kaydet
