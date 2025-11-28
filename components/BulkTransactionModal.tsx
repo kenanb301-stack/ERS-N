@@ -66,13 +66,14 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
         // Basic validation based on mode
         const firstRow = data[0] as any;
         if (mode === 'TRANSACTION') {
-             // Parça Kodu ÖNCELİKLİ
-             if (!firstRow.hasOwnProperty('Miktar') && !firstRow.hasOwnProperty('ParcaKodu')) {
-                setError('Hatalı format! Stok Hareketi için "ParcaKodu" ve "Miktar" sütunları gereklidir.');
+             // Parça Kodu ÖNCELİKLİ (Miktar zorunluluğu kalktı)
+             if (!firstRow.hasOwnProperty('ParcaKodu') && !firstRow.hasOwnProperty('Parça Kodu')) {
+                setError('Hatalı format! Stok Hareketi için "ParcaKodu" sütunu gereklidir.');
                 return;
             }
         } else {
-            if (!firstRow.hasOwnProperty('Aciklama') && !firstRow.hasOwnProperty('ParcaKodu')) {
+            // Liste için Parça Kodu veya Açıklama olması yeterli
+            if (!firstRow.hasOwnProperty('Aciklama') && !firstRow.hasOwnProperty('ParcaKodu') && !firstRow.hasOwnProperty('UrunAdi')) {
                 setError('Hatalı format! Liste için "ParcaKodu" veya "Aciklama" sütunları gereklidir.');
                 return;
             }
@@ -125,12 +126,14 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
 
     parsedData.forEach((row: any, index) => {
       const partCode = row['ParcaKodu'] || row['Parça Kodu'];
-      const quantity = row['Miktar'];
+      // Miktar boşsa 0 kabul et
+      const quantity = row['Miktar'] ? Number(row['Miktar']) : 0;
       const typeRaw = row['Islem'] || row['İşlem'] || 'GIRIS';
       const desc = row['Not'] || row['Aciklama'] || 'Toplu İşlem';
 
-      if (!partCode || !quantity) {
-        errors.push(`Satır ${index + 2}: Parça Kodu veya Miktar eksik.`);
+      // Sadece Parça Kodu zorunlu
+      if (!partCode) {
+        errors.push(`Satır ${index + 2}: Parça Kodu eksik.`);
         return;
       }
 
@@ -148,7 +151,7 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
 
       validTransactions.push({
         productId: product.id,
-        quantity: Number(quantity),
+        quantity: quantity,
         type: type,
         description: desc
       });
@@ -170,16 +173,22 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
 
     parsedData.forEach((row: any, index) => {
         const partCode = row['ParcaKodu'] || row['Parça Kodu'] || '';
-        const name = row['Aciklama'] || row['UrunAdi'] || row['Ürün Adı'];
+        let name = row['Aciklama'] || row['UrunAdi'] || row['Ürün Adı'];
         const location = row['Reyon'] || row['Raf'] || '';
         const material = row['Hammadde'] || row['Materyal'] || '';
         const unit = row['Birim'] || UNITS[0];
         const minStock = row['KritikStok'] || 10;
         const startStock = row['BaslangicStogu'] || 0;
 
+        // Açıklama boşsa Parça Kodu veya "-" kullan
         if (!name) {
-            errors.push(`Satır ${index + 2}: Açıklama/Ürün adı eksik.`);
-            return;
+            name = partCode ? partCode.toString().trim() : "-";
+        }
+        
+        // Parça Kodu da yoksa isim de yoksa hata ver (En az biri lazım)
+        if (name === "-" && !partCode) {
+             errors.push(`Satır ${index + 2}: Parça Kodu veya Açıklama girilmelidir.`);
+             return;
         }
 
         // Check duplicates by Part Code or Name
@@ -189,7 +198,7 @@ const BulkTransactionModal: React.FC<BulkTransactionModalProps> = ({
         }
 
         validProducts.push({
-            product_name: name,
+            product_name: name.toString().trim(),
             part_code: partCode ? partCode.toString().trim() : '',
             location: location ? location.toString().trim() : '',
             material: material ? material.toString().trim() : '',
