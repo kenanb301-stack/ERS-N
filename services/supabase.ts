@@ -42,20 +42,63 @@ export const initSupabase = (url: string, key: string) => {
   return supabase;
 };
 
+// --- YARDIMCI FONKSİYONLAR ---
+
+// 1. Pagination Loop: 1000 satır limitini aşmak için veriyi parça parça çeker
+const fetchAllData = async (client: any, table: string) => {
+    let allData: any[] = [];
+    let from = 0;
+    const step = 1000; // Supabase default max limit
+    let hasMore = true;
+
+    while (hasMore) {
+        const { data, error } = await client
+            .from(table)
+            .select('*')
+            .range(from, from + step - 1);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+            allData = [...allData, ...data];
+            from += step;
+            // Eğer gelen veri paketi step'ten küçükse, verinin sonuna gelinmiştir
+            if (data.length < step) {
+                hasMore = false;
+            }
+        } else {
+            hasMore = false;
+        }
+    }
+    return allData;
+};
+
+// 2. Batch Saving: Büyük verileri 500'erli paketler halinde kaydeder (Timeout önlemek için)
+const saveInBatches = async (client: any, table: string, data: any[]) => {
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < data.length; i += BATCH_SIZE) {
+        const batch = data.slice(i, i + BATCH_SIZE);
+        const { error } = await client
+            .from(table)
+            .upsert(batch, { onConflict: 'id' });
+        
+        if (error) throw error;
+    }
+};
+
 // TEST CONNECTION
 export const testConnection = async (url: string, key: string): Promise<{ success: boolean; message: string }> => {
     try {
         const client = initSupabase(url, key);
         if (!client) return { success: false, message: "URL veya API Key eksik." };
 
-        // Hafif bir sorgu ile bağlantı ve yetki testi (Products tablosundan 0 satır çek)
-        const { error, count } = await client
+        // Hafif bir sorgu ile bağlantı ve yetki testi
+        const { error } = await client
             .from('products')
             .select('*', { count: 'exact', head: true });
 
         if (error) {
             console.error("Test Error:", error);
-            // RLS veya Tablo Yok Hatası
             if (error.code === '42P01') return { success: false, message: "Tablolar bulunamadı. Lütfen SQL kodunu çalıştırın." };
             if (error.code === '42501') return { success: false, message: "Erişim Reddedildi. SQL kodundaki 'DISABLE RLS' satırlarını çalıştırın." };
             throw error;
@@ -70,24 +113,17 @@ export const testConnection = async (url: string, key: string): Promise<{ succes
     }
 };
 
-// FULL SYNC: Fetches all data from Supabase
+// FULL SYNC: Fetches ALL data from Supabase using pagination
 export const loadFromSupabase = async (url: string, key: string): Promise<{ success: boolean; data?: { products: Product[], transactions: Transaction[] }; message: string }> => {
   try {
     const client = initSupabase(url, key);
     if (!client) return { success: false, message: 'Supabase istemcisi başlatılamadı (URL formatını kontrol edin).' };
 
-    // Bağlantı testi için basit bir select
-    const { data: products, error: productsError } = await client
-      .from('products')
-      .select('*');
+    // Tüm ürünleri çek (Pagination ile)
+    const products = await fetchAllData(client, 'products');
 
-    if (productsError) throw productsError;
-
-    const { data: transactions, error: transactionsError } = await client
-      .from('transactions')
-      .select('*');
-
-    if (transactionsError) throw transactionsError;
+    // Tüm işlemleri çek (Pagination ile)
+    const transactions = await fetchAllData(client, 'transactions');
 
     return { 
         success: true, 
@@ -95,14 +131,13 @@ export const loadFromSupabase = async (url: string, key: string): Promise<{ succ
             products: products || [], 
             transactions: transactions || [] 
         }, 
-        message: 'Veriler başarıyla indirildi.' 
+        message: `Veriler indirildi. (${products.length} ürün, ${transactions.length} işlem)` 
     };
 
   } catch (error: any) {
     console.error("Supabase Load Error:", error);
     let msg = error.message || 'Bilinmeyen hata';
     
-    // Kullanıcı dostu hata mesajları
     if (msg.includes('Failed to fetch') || msg.includes('Network request failed')) {
         msg = 'Sunucuya ulaşılamadı. Project URL yanlış olabilir veya internet bağlantınız yok.';
     } else if (msg.includes('Invalid API key')) {
@@ -113,28 +148,20 @@ export const loadFromSupabase = async (url: string, key: string): Promise<{ succ
   }
 };
 
-// UPSERT: Merges local data with cloud data
+// UPSERT: Saves data in batches
 export const saveToSupabase = async (url: string, key: string, products: Product[], transactions: Transaction[]): Promise<{ success: boolean; message: string }> => {
   try {
     const client = initSupabase(url, key);
     if (!client) return { success: false, message: 'Supabase istemcisi başlatılamadı.' };
 
-    // 1. Upsert Products
+    // 1. Upsert Products (Batching)
     if (products.length > 0) {
-        const { error: pError } = await client
-        .from('products')
-        .upsert(products, { onConflict: 'id' });
-        
-        if (pError) throw pError;
+        await saveInBatches(client, 'products', products);
     }
 
-    // 2. Upsert Transactions
+    // 2. Upsert Transactions (Batching)
     if (transactions.length > 0) {
-        const { error: tError } = await client
-        .from('transactions')
-        .upsert(transactions, { onConflict: 'id' });
-
-        if (tError) throw tError;
+        await saveInBatches(client, 'transactions', transactions);
     }
 
     return { success: true, message: 'Veriler başarıyla eşitlendi.' };
