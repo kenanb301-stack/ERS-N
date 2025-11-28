@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { X, Cloud, Save, Key, Database, Copy, CheckCircle, ShieldCheck, Settings, FileText, ExternalLink } from 'lucide-react';
+import { X, Cloud, Save, Key, Database, Copy, CheckCircle, ShieldCheck, Settings, FileText, ExternalLink, Zap, AlertTriangle, Loader2 } from 'lucide-react';
 import { CloudConfig } from '../types';
+import { testConnection } from '../services/supabase';
 
 interface CloudSetupModalProps {
   isOpen: boolean;
@@ -14,6 +15,10 @@ const CloudSetupModal: React.FC<CloudSetupModalProps> = ({ isOpen, onClose, onSa
   const [url, setUrl] = useState(currentConfig?.supabaseUrl || '');
   const [apiKey, setApiKey] = useState(currentConfig?.supabaseKey || '');
   const [copied, setCopied] = useState(false);
+  
+  // Test State
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   if (!isOpen) return null;
 
@@ -26,8 +31,22 @@ const CloudSetupModal: React.FC<CloudSetupModalProps> = ({ isOpen, onClose, onSa
     onClose();
   };
 
+  const handleTest = async () => {
+      if (!url.trim() || !apiKey.trim()) {
+          setTestResult({ success: false, message: "Önce URL ve Key giriniz." });
+          return;
+      }
+      setIsTesting(true);
+      setTestResult(null);
+      
+      const result = await testConnection(url, apiKey);
+      setIsTesting(false);
+      setTestResult(result);
+  };
+
+  // SQL Code with RLS DISABLE commands included
   const sqlCode = `
--- Tablo oluşturma komutları (Supabase SQL Editor'e yapıştırın) --
+-- Tablo oluşturma komutları --
 
 create table if not exists products (
   id text primary key,
@@ -56,6 +75,10 @@ create table if not exists transactions (
   previous_stock numeric,
   new_stock numeric
 );
+
+-- ÖNEMLİ: Bağlantı hatalarını önlemek için güvenlik duvarını (RLS) kaldırıyoruz --
+alter table products disable row level security;
+alter table transactions disable row level security;
   `.trim();
 
   const handleCopy = () => {
@@ -96,7 +119,7 @@ create table if not exists transactions (
                     <div className="flex items-center gap-2">
                         <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold">1</span>
                         <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">
-                            Tabloları Oluşturun
+                            Tabloları Oluşturun (SQL)
                         </label>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
@@ -117,8 +140,9 @@ create table if not exists transactions (
                             {copied ? <CheckCircle size={16} className="text-green-400" /> : <Copy size={16} />}
                         </button>
                     </div>
-                    <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                        <CheckCircle size={12} className="text-green-500" /> "Success" yazısını gördüyseniz 2. adıma geçin.
+                    <div className="text-[10px] text-amber-600 dark:text-amber-500 flex items-start gap-1 bg-amber-50 dark:bg-amber-900/10 p-2 rounded">
+                        <AlertTriangle size={12} className="min-w-[12px] mt-0.5" /> 
+                        Kodun sonundaki "disable row level security" komutları bağlantı hatalarını önlemek için kritiktir.
                     </div>
                 </div>
 
@@ -127,7 +151,7 @@ create table if not exists transactions (
                     <div className="flex items-center gap-2">
                         <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold">2</span>
                         <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">
-                            Bağlantı Bilgilerini Alın
+                            Bağlantı Bilgilerini Girin
                         </label>
                     </div>
                     
@@ -140,7 +164,6 @@ create table if not exists transactions (
                             <FileText size={14} className="text-slate-400" />
                             2. Açılan listeden <strong>API</strong> sekmesini seçin.
                         </p>
-                        <p>3. Aşağıdaki bilgileri o sayfadan kopyalayın:</p>
                     </div>
                     
                     <div>
@@ -155,7 +178,6 @@ create table if not exists transactions (
                                 className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 outline-none text-xs font-mono"
                             />
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-1">API sayfasının en üstündeki kutucukta yazar.</p>
                     </div>
 
                     <div>
@@ -170,18 +192,36 @@ create table if not exists transactions (
                                 className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 outline-none text-xs font-mono"
                             />
                         </div>
-                        <p className="text-[10px] text-amber-600 mt-1 dark:text-amber-500">* "anon" ve "public" etiketli anahtarı kopyalayın ("service_role" değil).</p>
                     </div>
                 </div>
             </div>
 
-            <button 
-                onClick={handleSave}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none active:scale-95 transition-transform"
-            >
-                <Save size={20} />
-                Bağlan ve Eşitle
-            </button>
+            {/* TEST RESULT AREA */}
+            {testResult && (
+                <div className={`p-3 rounded-lg flex items-center gap-2 text-sm font-bold ${testResult.success ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                    {testResult.success ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
+                    {testResult.message}
+                </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+                <button
+                    onClick={handleTest}
+                    disabled={isTesting}
+                    className="px-4 py-4 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center gap-2"
+                >
+                    {isTesting ? <Loader2 size={20} className="animate-spin" /> : <Zap size={20} />}
+                    Bağlantıyı Test Et
+                </button>
+                <button 
+                    onClick={handleSave}
+                    disabled={isTesting}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none active:scale-95 transition-transform"
+                >
+                    <Save size={20} />
+                    Kaydet ve Bağlan
+                </button>
+            </div>
         </div>
       </div>
     </div>

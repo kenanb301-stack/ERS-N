@@ -9,6 +9,11 @@ let currentKey: string = '';
 export const initSupabase = (url: string, key: string) => {
   // 1. URL Düzeltme (HTTPS ekle)
   let safeUrl = url.trim();
+  // Sondaki slash işaretini kaldır
+  if (safeUrl.endsWith('/')) {
+    safeUrl = safeUrl.slice(0, -1);
+  }
+  
   if (!safeUrl.startsWith('http')) {
     safeUrl = `https://${safeUrl}`;
   }
@@ -18,7 +23,14 @@ export const initSupabase = (url: string, key: string) => {
   // 2. Singleton Reset (Eğer ayarlar değiştiyse client'ı yenile)
   if (!supabase || currentUrl !== safeUrl || currentKey !== safeKey) {
     try {
-      supabase = createClient(safeUrl, safeKey);
+      if (!safeUrl || !safeKey) return null;
+      
+      supabase = createClient(safeUrl, safeKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        }
+      });
       currentUrl = safeUrl;
       currentKey = safeKey;
       console.log("Supabase connection refreshed");
@@ -28,6 +40,34 @@ export const initSupabase = (url: string, key: string) => {
     }
   }
   return supabase;
+};
+
+// TEST CONNECTION
+export const testConnection = async (url: string, key: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        const client = initSupabase(url, key);
+        if (!client) return { success: false, message: "URL veya API Key eksik." };
+
+        // Hafif bir sorgu ile bağlantı ve yetki testi (Products tablosundan 0 satır çek)
+        const { error, count } = await client
+            .from('products')
+            .select('*', { count: 'exact', head: true });
+
+        if (error) {
+            console.error("Test Error:", error);
+            // RLS veya Tablo Yok Hatası
+            if (error.code === '42P01') return { success: false, message: "Tablolar bulunamadı. Lütfen SQL kodunu çalıştırın." };
+            if (error.code === '42501') return { success: false, message: "Erişim Reddedildi. SQL kodundaki 'DISABLE RLS' satırlarını çalıştırın." };
+            throw error;
+        }
+
+        return { success: true, message: "Bağlantı Başarılı! Veritabanı hazır." };
+    } catch (error: any) {
+        let msg = error.message || 'Bilinmeyen hata';
+        if (msg.includes('Failed to fetch')) msg = 'Sunucuya ulaşılamadı. Project URL yanlış.';
+        if (msg.includes('Invalid API key')) msg = 'API Key geçersiz.';
+        return { success: false, message: msg };
+    }
 };
 
 // FULL SYNC: Fetches all data from Supabase
