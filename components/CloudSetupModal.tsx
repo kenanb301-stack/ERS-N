@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { X, Cloud, Save, Key, Database, Copy, CheckCircle, ShieldCheck } from 'lucide-react';
+import { X, Cloud, Save, Key, Database, Copy, CheckCircle, ShieldCheck, Settings, FileText, ExternalLink } from 'lucide-react';
 import { CloudConfig } from '../types';
 
 interface CloudSetupModalProps {
@@ -85,7 +85,7 @@ create table if not exists transactions (
                     <ShieldCheck size={16} /> Profesyonel Veritabanı
                 </h3>
                 <p className="text-sm text-indigo-700 dark:text-indigo-200 opacity-90">
-                    Artık dosya limiti, veri kaybı veya çakışma sorunu yok. Supabase ile milyonlarca veri güvenle saklanır.
+                    Supabase sayesinde veri kaybı, çakışma veya limit sorunu yaşamadan milyonlarca stok verisini yönetebilirsiniz.
                 </p>
             </div>
 
@@ -93,13 +93,19 @@ create table if not exists transactions (
                 
                 {/* STEP 1: SQL */}
                 <div className="space-y-3">
-                    <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">
-                        Adım 1: Veritabanını Oluşturun
-                    </label>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                        <a href="https://supabase.com/dashboard" target="_blank" className="text-blue-600 hover:underline font-bold">Supabase.com</a>'da yeni proje açın. Sol menüden <strong>SQL Editor</strong>'e gidin ve bu kodu yapıştırıp <strong>RUN</strong> deyin.
+                    <div className="flex items-center gap-2">
+                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold">1</span>
+                        <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">
+                            Tabloları Oluşturun
+                        </label>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        <a href="https://supabase.com/dashboard" target="_blank" className="text-blue-600 hover:underline font-bold flex items-center gap-1">
+                            Supabase Dashboard <ExternalLink size={10} />
+                        </a>
+                        adresine gidin. Sol menüden <strong>SQL Editor</strong>'e tıklayın, bu kodu yapıştırın ve sağ alttaki <strong>RUN</strong> butonuna basın.
                     </p>
-                    <div className="relative bg-slate-900 rounded-lg p-3 group">
+                    <div className="relative bg-slate-900 rounded-lg p-3 group border border-slate-700">
                         <pre className="text-[10px] font-mono text-green-400 overflow-x-auto h-32 whitespace-pre-wrap">
                             {sqlCode}
                         </pre>
@@ -111,16 +117,31 @@ create table if not exists transactions (
                             {copied ? <CheckCircle size={16} className="text-green-400" /> : <Copy size={16} />}
                         </button>
                     </div>
+                    <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                        <CheckCircle size={12} className="text-green-500" /> "Success" yazısını gördüyseniz 2. adıma geçin.
+                    </div>
                 </div>
 
                 {/* STEP 2: CREDENTIALS */}
                 <div className="space-y-4">
-                    <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">
-                        Adım 2: Bağlantı Bilgileri
-                    </label>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Supabase'de <strong>Settings &gt; API</strong> menüsüne gidin.
-                    </p>
+                    <div className="flex items-center gap-2">
+                        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold">2</span>
+                        <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">
+                            Bağlantı Bilgilerini Alın
+                        </label>
+                    </div>
+                    
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-400 space-y-2">
+                        <p className="flex items-center gap-2">
+                            <Settings size={14} className="text-slate-400" />
+                            1. Sol menünün <strong>EN ALTINDAKİ</strong> Dişli Çarka (Project Settings) tıklayın.
+                        </p>
+                        <p className="flex items-center gap-2">
+                            <FileText size={14} className="text-slate-400" />
+                            2. Açılan listeden <strong>API</strong> sekmesini seçin.
+                        </p>
+                        <p>3. Aşağıdaki bilgileri o sayfadan kopyalayın:</p>
+                    </div>
                     
                     <div>
                         <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Project URL</label>
@@ -134,6 +155,7 @@ create table if not exists transactions (
                                 className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 outline-none text-xs font-mono"
                             />
                         </div>
+                        <p className="text-[10px] text-slate-400 mt-1">API sayfasının en üstündeki kutucukta yazar.</p>
                     </div>
 
                     <div>
@@ -148,6 +170,7 @@ create table if not exists transactions (
                                 className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-blue-500 outline-none text-xs font-mono"
                             />
                         </div>
+                        <p className="text-[10px] text-amber-600 mt-1 dark:text-amber-500">* "anon" ve "public" etiketli anahtarı kopyalayın ("service_role" değil).</p>
                     </div>
                 </div>
             </div>
