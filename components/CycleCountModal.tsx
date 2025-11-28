@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle, Search, Calendar, MapPin, Eye, EyeOff, ClipboardList, ScanLine, AlertTriangle, Check } from 'lucide-react';
+import { X, CheckCircle, Search, Calendar, MapPin, Eye, EyeOff, ClipboardList, ScanLine, AlertTriangle, Check, PieChart, TrendingUp, ArrowRight, RefreshCw } from 'lucide-react';
 import { Product } from '../types';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -11,8 +11,17 @@ interface CycleCountModalProps {
   onSubmitCount: (productId: string, countedQty: number) => void;
 }
 
+interface CountResult {
+    productId: string;
+    productName: string;
+    partCode?: string;
+    systemQty: number;
+    countedQty: number;
+    diff: number;
+}
+
 const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, products, onSubmitCount }) => {
-  const [activeTab, setActiveTab] = useState<'PLAN' | 'COUNT'>('PLAN');
+  const [activeTab, setActiveTab] = useState<'PLAN' | 'COUNT' | 'REPORT'>('PLAN');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [blindMode, setBlindMode] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -21,6 +30,18 @@ const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, prod
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [countedQty, setCountedQty] = useState<string>('');
   const [showScanner, setShowScanner] = useState(false);
+
+  // Session Results (Rapor için)
+  const [sessionResults, setSessionResults] = useState<CountResult[]>([]);
+
+  useEffect(() => {
+      if (isOpen) {
+          // Modal her açıldığında değil, manuel sıfırlanmadıkça raporu tutabiliriz.
+          // Ancak temiz bir başlangıç için sıfırlayalım.
+          setSessionResults([]);
+          setActiveTab('PLAN');
+      }
+  }, [isOpen]);
 
   // Filter products that haven't been counted recently (e.g., > 30 days) or never
   const productsDueForCount = products
@@ -54,11 +75,12 @@ const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, prod
 
   const handleScanSuccess = (code: string) => {
       setShowScanner(false);
+      const searchCode = code.trim();
       const product = products.find(p => 
-          (p.barcode === code) || 
-          (p.part_code === code) || 
-          (p.id === code) ||
-          (p.short_id === code)
+          (p.barcode === searchCode) || 
+          (p.part_code === searchCode) || 
+          (p.id === searchCode) ||
+          (p.short_id === searchCode)
       );
 
       if (product) {
@@ -80,12 +102,31 @@ const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, prod
           }
       }
 
+      // Veritabanına kaydet
       onSubmitCount(activeProduct.id, qty);
+
+      // Oturum raporuna ekle
+      const result: CountResult = {
+          productId: activeProduct.id,
+          productName: activeProduct.product_name,
+          partCode: activeProduct.part_code,
+          systemQty: activeProduct.current_stock,
+          countedQty: qty,
+          diff: diff
+      };
+      setSessionResults(prev => [...prev, result]);
+
       setActiveProduct(null);
       setCountedQty('');
-      // Go back to plan or stay in count mode? Let's stay in count mode for next item if using scanner, but here we go back to list
       setActiveTab('PLAN'); 
   };
+
+  // --- REPORT CALCULATIONS ---
+  const totalCounted = sessionResults.length;
+  const accurateItems = sessionResults.filter(r => r.diff === 0).length;
+  const accuracyRate = totalCounted > 0 ? Math.round((accurateItems / totalCounted) * 100) : 0;
+  const totalSurplus = sessionResults.reduce((acc, r) => acc + (r.diff > 0 ? r.diff : 0), 0);
+  const totalDeficit = sessionResults.reduce((acc, r) => acc + (r.diff < 0 ? Math.abs(r.diff) : 0), 0);
 
   if (!isOpen) return null;
 
@@ -112,41 +153,52 @@ const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, prod
         </div>
 
         {/* Tabs & Toolbar */}
-        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-4 justify-between items-center bg-white dark:bg-slate-800">
-            <div className="flex gap-2 w-full sm:w-auto">
-                <button 
-                    onClick={() => { setActiveTab('PLAN'); setActiveProduct(null); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'PLAN' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}
-                >
-                    Planlama Listesi
-                </button>
-                <button 
-                    onClick={() => setActiveTab('COUNT')}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'COUNT' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}
-                >
-                    Sayım Ekranı
-                </button>
-            </div>
-
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-                <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg">
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Kör Sayım:</span>
+        {activeTab !== 'REPORT' && (
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-4 justify-between items-center bg-white dark:bg-slate-800">
+                <div className="flex gap-2 w-full sm:w-auto">
                     <button 
-                        onClick={() => setBlindMode(!blindMode)}
-                        className={`p-1 rounded ${blindMode ? 'bg-green-500 text-white' : 'bg-slate-300 dark:bg-slate-600 text-slate-500'}`}
-                        title={blindMode ? "Sistem stoğu gizli (Önerilen)" : "Sistem stoğu açık"}
+                        onClick={() => { setActiveTab('PLAN'); setActiveProduct(null); }}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'PLAN' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}
                     >
-                        {blindMode ? <EyeOff size={16} /> : <Eye size={16} />}
+                        Planlama Listesi
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('COUNT')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'COUNT' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}
+                    >
+                        Sayım Ekranı
                     </button>
                 </div>
-                <button 
-                    onClick={() => setShowScanner(true)}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm active:scale-95 transition-transform"
-                >
-                    <ScanLine size={18} /> <span className="hidden sm:inline">Barkodla Başla</span>
-                </button>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                    {activeTab === 'PLAN' && sessionResults.length > 0 && (
+                        <button 
+                            onClick={() => setActiveTab('REPORT')}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm active:scale-95 transition-transform flex items-center gap-2"
+                        >
+                            <PieChart size={18} /> Raporu Gör ({sessionResults.length})
+                        </button>
+                    )}
+                    
+                    <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Kör Sayım:</span>
+                        <button 
+                            onClick={() => setBlindMode(!blindMode)}
+                            className={`p-1 rounded ${blindMode ? 'bg-green-500 text-white' : 'bg-slate-300 dark:bg-slate-600 text-slate-500'}`}
+                            title={blindMode ? "Sistem stoğu gizli (Önerilen)" : "Sistem stoğu açık"}
+                        >
+                            {blindMode ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                    </div>
+                    <button 
+                        onClick={() => setShowScanner(true)}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm active:scale-95 transition-transform"
+                    >
+                        <ScanLine size={18} /> <span className="hidden sm:inline">Barkodla Başla</span>
+                    </button>
+                </div>
             </div>
-        </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900 p-4">
@@ -281,6 +333,85 @@ const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, prod
                             </div>
                         </div>
                     )}
+                </div>
+            )}
+
+            {activeTab === 'REPORT' && (
+                <div className="max-w-2xl mx-auto space-y-6">
+                    <div className="text-center">
+                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Sayım Özeti</h2>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm">Bu oturumda yapılan işlemlerin raporu</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl text-center">
+                            <div className="text-2xl font-black text-slate-800 dark:text-white">{totalCounted}</div>
+                            <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Sayılan Ürün</div>
+                        </div>
+                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl text-center">
+                            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{accuracyRate}%</div>
+                            <div className="text-xs font-bold text-emerald-700 dark:text-emerald-300 uppercase">Doğruluk</div>
+                        </div>
+                        <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl text-center">
+                            <div className="text-2xl font-black text-red-600 dark:text-red-400">{totalDeficit}</div>
+                            <div className="text-xs font-bold text-red-700 dark:text-red-300 uppercase">Toplam Eksik</div>
+                        </div>
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl text-center">
+                            <div className="text-2xl font-black text-blue-600 dark:text-blue-400">{totalSurplus}</div>
+                            <div className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase">Toplam Fazla</div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        <div className="p-4 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-200">
+                            Fark Tespit Edilen Ürünler
+                        </div>
+                        <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                            {sessionResults.filter(r => r.diff !== 0).length === 0 ? (
+                                <div className="p-8 text-center text-emerald-500">
+                                    <CheckCircle size={48} className="mx-auto mb-2" />
+                                    <p className="font-bold">Mükemmel!</p>
+                                    <p className="text-sm">Hiçbir üründe fark çıkmadı.</p>
+                                </div>
+                            ) : (
+                                sessionResults.filter(r => r.diff !== 0).map((res, idx) => (
+                                    <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                        <div>
+                                            <div className="font-bold text-slate-800 dark:text-white">{res.productName}</div>
+                                            <div className="text-xs text-slate-500 font-mono">{res.partCode}</div>
+                                        </div>
+                                        <div className="text-right flex items-center gap-4">
+                                            <div className="text-xs text-slate-400">
+                                                <div>Sistem: {res.systemQty}</div>
+                                                <div>Sayılan: {res.countedQty}</div>
+                                            </div>
+                                            <div className={`font-bold text-lg ${res.diff > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                                {res.diff > 0 ? `+${res.diff}` : res.diff}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => setActiveTab('PLAN')}
+                            className="flex-1 py-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                        >
+                            Sayima Devam Et
+                        </button>
+                        <button 
+                            onClick={() => {
+                                setSessionResults([]);
+                                onClose();
+                            }}
+                            className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none"
+                        >
+                            Oturumu Kapat
+                        </button>
+                    </div>
                 </div>
             )}
 
