@@ -171,15 +171,6 @@ const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, prod
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto">
-                    {activeTab === 'PLAN' && sessionResults.length > 0 && (
-                        <button 
-                            onClick={() => setActiveTab('REPORT')}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm active:scale-95 transition-transform flex items-center gap-2"
-                        >
-                            <PieChart size={18} /> Raporu Gör ({sessionResults.length})
-                        </button>
-                    )}
-                    
                     <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg">
                         <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Kör Sayım:</span>
                         <button 
@@ -416,6 +407,25 @@ const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, prod
             )}
 
         </div>
+
+        {/* LIVE STATUS BAR (Only visible if counting started) */}
+        {sessionResults.length > 0 && activeTab === 'PLAN' && (
+            <div className="p-3 bg-slate-800 text-white flex items-center justify-between shadow-lg z-10 border-t border-slate-700">
+                <div className="flex gap-4 text-xs sm:text-sm">
+                    <span className="flex items-center gap-1"><CheckCircle size={14} className="text-emerald-400"/> Sayılan: <b>{totalCounted}</b></span>
+                    <span className="flex items-center gap-1"><TrendingUp size={14} className="text-blue-400"/> Doğruluk: <b>%{accuracyRate}</b></span>
+                    {(totalDeficit > 0 || totalSurplus > 0) && (
+                        <span className="flex items-center gap-1 text-red-300 animate-pulse"><AlertTriangle size={14}/> Fark: <b>{totalDeficit + totalSurplus}</b></span>
+                    )}
+                </div>
+                <button 
+                    onClick={() => setActiveTab('REPORT')}
+                    className="flex items-center gap-1 text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded transition-colors"
+                >
+                    Raporu Gör <ArrowRight size={12} />
+                </button>
+            </div>
+        )}
       </div>
     </div>
     </>
