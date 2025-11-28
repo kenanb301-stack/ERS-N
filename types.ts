@@ -50,7 +50,7 @@ export interface User {
 }
 
 export interface CloudConfig {
-  apiKey: string;
-  binId: string;
+  supabaseUrl: string;
+  supabaseKey: string;
   lastSync?: string;
 }

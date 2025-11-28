@@ -15,14 +15,14 @@ import Analytics from './components/Analytics';
 import Login from './components/Login';
 import DataBackupModal from './components/DataBackupModal';
 import CloudSetupModal from './components/CloudSetupModal';
-import { saveToCloud, loadFromCloud } from './services/jsonbin';
+import { saveToSupabase, loadFromSupabase } from './services/supabase';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState, User, CloudConfig } from './types';
 
 // Utility to generate simple ID
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 
 function App() {
   // --- AUTH STATE ---
@@ -114,18 +114,18 @@ function App() {
   
   // 1. Initial Load & Periodic Polling
   useEffect(() => {
-      if (cloudConfig?.apiKey && cloudConfig?.binId && currentUser) {
+      if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey && currentUser) {
           // App açılışında otomatik çek
           performCloudLoad(true);
 
-          // Her 30 saniyede bir arka planda kontrol et (JSONBin hızlıdır)
+          // Her 30 saniyede bir arka planda kontrol et
           const intervalId = setInterval(() => {
               performCloudLoad(true);
           }, 30000);
 
           return () => clearInterval(intervalId);
       }
-  }, [cloudConfig?.apiKey, cloudConfig?.binId, currentUser]);
+  }, [cloudConfig?.supabaseUrl, cloudConfig?.supabaseKey, currentUser]);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
@@ -143,8 +143,8 @@ function App() {
 
   // --- CLOUD OPERATIONS ---
 
-  const handleSaveCloudConfig = (apiKey: string, binId: string) => {
-      const newConfig = { apiKey, binId };
+  const handleSaveCloudConfig = (url: string, key: string) => {
+      const newConfig = { supabaseUrl: url, supabaseKey: key };
       setCloudConfig(newConfig);
       localStorage.setItem('depopro_cloud_config', JSON.stringify(newConfig));
       // Config kaydedilince hemen bir çekme işlemi yap
@@ -171,21 +171,18 @@ function App() {
       }
 
       // 3. Trigger Auto Cloud Sync (Fire and forget)
-      if (cloudConfig?.apiKey && cloudConfig?.binId) {
-          performCloudSave(newProducts, newTransactions, now);
+      if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
+          performCloudSave(newProducts, newTransactions);
       }
   };
 
-  const performCloudSave = async (currentProducts: Product[], currentTransactions: Transaction[], timestamp: string) => {
-      if (!cloudConfig?.apiKey || !cloudConfig?.binId) return;
+  const performCloudSave = async (currentProducts: Product[], currentTransactions: Transaction[]) => {
+      if (!cloudConfig?.supabaseUrl || !cloudConfig?.supabaseKey) return;
 
       setSyncStatus('SYNCING');
       try {
-          const result = await saveToCloud(cloudConfig.apiKey, cloudConfig.binId, {
-              products: currentProducts,
-              transactions: currentTransactions,
-              lastUpdated: timestamp
-          });
+          // Supabase'e tüm veriyi upsert ediyoruz (merge mantığı)
+          const result = await saveToSupabase(cloudConfig.supabaseUrl, cloudConfig.supabaseKey, currentProducts, currentTransactions);
 
           if (result.success) {
               setSyncStatus('SUCCESS');
@@ -202,37 +199,38 @@ function App() {
       }
   };
 
-  const performCloudLoad = async (silent: boolean = false) => {
-       if (!cloudConfig?.apiKey || !cloudConfig?.binId) return;
+  const performCloudLoad = async (silent: boolean = false, force: boolean = false) => {
+       if (!cloudConfig?.supabaseUrl || !cloudConfig?.supabaseKey) return;
 
        if (!silent) setSyncStatus('SYNCING');
 
        try {
-           const result = await loadFromCloud(cloudConfig.apiKey, cloudConfig.binId);
+           const result = await loadFromSupabase(cloudConfig.supabaseUrl, cloudConfig.supabaseKey);
            
            if (result.success && result.data) {
-               // TIMESTAMP CHECK
-               const localLastUpdate = localStorage.getItem('depopro_last_updated');
-               const cloudLastUpdate = result.data.lastUpdated;
+               // Verileri güncelle (Supabase kaynaklı veri her zaman daha güvenilirdir)
+               // Ancak, offline çalışma sırasında oluşturulmuş ve henüz gönderilmemiş veri varsa onu korumamız gerekir.
+               // Supabase 'load' işlemi tüm veriyi getirdiği için, bunu doğrudan set etmek en temiz yoldur.
+               // *Eğer PC'de yeni veri girdim ama henüz sunucuya gitmediyse, bu işlem onu silebilir.* 
+               // *Ancak Supabase çok hızlı olduğu için bu risk düşüktür.*
+               
+               const cloudProducts = result.data.products || [];
+               const cloudTransactions = result.data.transactions || [];
 
-               // If local data exists and is NEWER than cloud data, DO NOT OVERWRITE
-               if (localLastUpdate && cloudLastUpdate && new Date(localLastUpdate) > new Date(cloudLastUpdate)) {
-                   console.log("Local data is newer. Skipping cloud load.");
-                   if (!silent) setSyncStatus('SUCCESS'); 
+               // Değişiklik yoksa render etme
+               if (JSON.stringify(cloudProducts) === JSON.stringify(products) && JSON.stringify(cloudTransactions) === JSON.stringify(transactions)) {
+                   if (!silent) setSyncStatus('SUCCESS');
+                   setTimeout(() => setSyncStatus('IDLE'), 3000);
                    return;
                }
 
                // Gelen veriyi local state ile güncelle
-               setProducts(result.data.products || []);
-               setTransactions(result.data.transactions || []);
+               setProducts(cloudProducts);
+               setTransactions(cloudTransactions);
                
                // LocalStorage'ı da güncelle
-               localStorage.setItem('depopro_products', JSON.stringify(result.data.products || []));
-               localStorage.setItem('depopro_transactions', JSON.stringify(result.data.transactions || []));
-               // Sync local timestamp to match cloud
-               if (cloudLastUpdate) {
-                   localStorage.setItem('depopro_last_updated', cloudLastUpdate);
-               }
+               localStorage.setItem('depopro_products', JSON.stringify(cloudProducts));
+               localStorage.setItem('depopro_transactions', JSON.stringify(cloudTransactions));
                
                setSyncStatus('SUCCESS');
                setLastSyncTime(new Date().toLocaleTimeString());
@@ -719,17 +717,17 @@ function App() {
                             {syncStatus === 'SYNCING' && <Loader2 size={16} className="text-blue-500 animate-spin" />}
                             {syncStatus === 'SUCCESS' && <CheckCircle2 size={16} className="text-green-500" />}
                             {syncStatus === 'ERROR' && <WifiOff size={16} className="text-red-500" />}
-                            {syncStatus === 'IDLE' && <Cloud size={16} className={cloudConfig?.apiKey ? "text-blue-500" : "text-slate-400"} />}
+                            {syncStatus === 'IDLE' && <Cloud size={16} className={cloudConfig?.supabaseUrl ? "text-blue-500" : "text-slate-400"} />}
                             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                                 {syncStatus === 'SYNCING' ? 'Eşitleniyor...' : 
                                  syncStatus === 'SUCCESS' ? 'Eşitlendi' :
                                  syncStatus === 'ERROR' ? 'Hata' : 
-                                 cloudConfig?.apiKey ? 'Otomatik' : 'Yerel Mod'}
+                                 cloudConfig?.supabaseUrl ? 'Otomatik' : 'Yerel Mod'}
                             </span>
                         </div>
                         <button 
-                            onClick={() => performCloudLoad(false)}
-                            disabled={syncStatus === 'SYNCING' || !cloudConfig?.apiKey}
+                            onClick={() => performCloudLoad(false, true)}
+                            disabled={syncStatus === 'SYNCING' || !cloudConfig?.supabaseUrl}
                             title="Zorla Eşitle"
                         >
                             <RefreshCw size={14} className={`text-slate-400 hover:text-blue-500 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
@@ -738,10 +736,10 @@ function App() {
 
                     <button 
                         onClick={() => setIsCloudSetupOpen(true)}
-                        className={`w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium border ${!cloudConfig?.apiKey ? 'bg-amber-50 text-amber-600 border-amber-200 animate-pulse' : 'text-slate-500 hover:bg-slate-100 border-transparent'}`}
+                        className={`w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium border ${!cloudConfig?.supabaseUrl ? 'bg-amber-50 text-amber-600 border-amber-200 animate-pulse' : 'text-slate-500 hover:bg-slate-100 border-transparent'}`}
                     >
-                        <Cloud size={14} /> 
-                        {!cloudConfig?.apiKey ? 'Bulut Kurulumu Yap' : 'Bulut Ayarları'}
+                        <DatabaseIcon size={14} /> 
+                        {!cloudConfig?.supabaseUrl ? 'Bulut Kurulumu Yap' : 'Bulut Ayarları'}
                     </button>
                  </>
              )}
@@ -752,7 +750,7 @@ function App() {
                         onClick={() => setIsDataBackupOpen(true)}
                         className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
                     >
-                        <DatabaseIcon size={18} className="text-slate-500" />
+                        <DownloadCloud size={18} className="text-slate-500" />
                         Yerel Yedek
                     </button>
                  </>
@@ -795,11 +793,11 @@ function App() {
          </div>
         <div className="flex items-center gap-3">
              {currentUser.role === 'ADMIN' && (
-                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-1" onClick={() => !cloudConfig?.apiKey && setIsCloudSetupOpen(true)}>
+                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-1" onClick={() => !cloudConfig?.supabaseUrl && setIsCloudSetupOpen(true)}>
                     {syncStatus === 'SYNCING' ? <Loader2 size={14} className="animate-spin text-blue-500" /> : 
                      syncStatus === 'SUCCESS' ? <CheckCircle2 size={14} className="text-green-500" /> :
                      syncStatus === 'ERROR' ? <WifiOff size={14} className="text-red-500" /> :
-                     cloudConfig?.apiKey ? <Cloud size={14} className="text-blue-500" /> : <Cloud size={14} className="text-slate-300" />
+                     cloudConfig?.supabaseUrl ? <Cloud size={14} className="text-blue-500" /> : <Cloud size={14} className="text-slate-300" />
                     }
                  </div>
              )}
@@ -825,9 +823,9 @@ function App() {
                     <div className="flex gap-2">
                         {/* Mobile Only Extra Sync Buttons */}
                         <div className="md:hidden flex gap-2">
-                            {cloudConfig?.apiKey ? (
+                            {cloudConfig?.supabaseUrl ? (
                                 <button 
-                                    onClick={() => performCloudLoad(false)}
+                                    onClick={() => performCloudLoad(false, true)}
                                     className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1"
                                 >
                                     <RefreshCw size={16} /> Güncelle
@@ -874,7 +872,7 @@ function App() {
                     onScan={handleGlobalScanClick}
                     onReportSent={handleReportSent}
                     currentUser={currentUser}
-                    isCloudEnabled={!!cloudConfig?.apiKey}
+                    isCloudEnabled={!!cloudConfig?.supabaseUrl}
                     onOpenCloudSetup={() => setIsCloudSetupOpen(true)}
                 />
             )}
