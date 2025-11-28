@@ -13,6 +13,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     current_stock: 3, // Kritik seviye altı (Örnekteki miktar)
     barcode: 'P-00003',
     created_at: '2023-10-01',
+    last_counted_at: '2023-12-01T10:00:00.000Z'
   },
   {
     id: 'p-2',

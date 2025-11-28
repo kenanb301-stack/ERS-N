@@ -94,6 +94,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (p.barcode && p.barcode.includes(searchTerm)) ||
     (p.id && p.id === searchTerm) ||
+    (p.short_id && p.short_id === searchTerm) ||
     (p.location && p.location.toLowerCase().includes(searchTerm.toLowerCase())) // Allow finding by typing location
   );
 
@@ -115,12 +116,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       // 1. Barcode field
       // 2. Part Code
       // 3. System ID
-      // 4. LOCATION (Reyon) - YENİ ÖZELLİK
+      // 4. Short ID (6 Digit) - NEW
+      // 5. LOCATION (Reyon)
       const product = products.find(p => 
           (p.barcode === searchCode) || 
           (p.part_code === searchCode) || 
           (p.id === searchCode) ||
-          (p.location === searchCode) // <--- Reyon eşleşmesi eklendi
+          (p.short_id === searchCode) || 
+          (p.location === searchCode)
       );
       
       if (product) {

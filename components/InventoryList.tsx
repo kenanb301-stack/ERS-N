@@ -28,7 +28,8 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
                             (product.location && product.location.toLowerCase().includes(term)) ||
                             (product.material && product.material.toLowerCase().includes(term)) ||
                             (product.barcode && product.barcode.includes(term)) ||
-                            (product.id && product.id.toLowerCase() === term);
+                            (product.id && product.id.toLowerCase() === term) ||
+                            (product.short_id && product.short_id === term); // Short ID search
       return matchesSearch;
     });
   }, [products, searchTerm]);

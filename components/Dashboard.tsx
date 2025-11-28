@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, BarChart3, FileSpreadsheet, Download, ShieldAlert, ClipboardCheck, Mail, ScanLine, Clock, Check, RefreshCw, CloudOff } from 'lucide-react';
+import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, BarChart3, FileSpreadsheet, Download, ShieldAlert, ClipboardCheck, Mail, ScanLine, Clock, Check, RefreshCw, CloudOff, ListChecks } from 'lucide-react';
 import { Product, Transaction, TransactionType, User } from '../types';
 
 interface DashboardProps {
@@ -12,13 +12,14 @@ interface DashboardProps {
   onViewNegativeStock: () => void;
   onOrderSimulation: () => void;
   onScan: () => void;
+  onCycleCount: () => void;
   onReportSent: (productIds: string[]) => void;
   currentUser: User;
   isCloudEnabled?: boolean;
   onOpenCloudSetup?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation, onScan, onReportSent, currentUser, isCloudEnabled, onOpenCloudSetup }) => {
+const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderSimulation, onScan, onCycleCount, onReportSent, currentUser, isCloudEnabled, onOpenCloudSetup }) => {
   const totalProducts = products.length;
   
   const lowStockProducts = products.filter(p => p.current_stock <= p.min_stock_level && p.current_stock >= 0);
@@ -194,7 +195,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
       {currentUser.role === 'ADMIN' && (
         <>
           <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Hızlı İşlemler</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
             
             {/* BIG SCAN BUTTON */}
             <button 
@@ -231,6 +232,15 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
               <ClipboardCheck size={24} className="mb-1" />
               <span className="font-bold text-sm text-center">SİPARİŞ KONTROL</span>
               <span className="text-[10px] opacity-80 hidden md:block">Stok Yeterlilik</span>
+            </button>
+
+            <button 
+              onClick={onCycleCount}
+              className="flex flex-col items-center justify-center p-4 bg-indigo-500 active:bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200 dark:shadow-none transition-transform transform active:scale-95"
+            >
+              <ListChecks size={24} className="mb-1" />
+              <span className="font-bold text-sm text-center">DÜZENLİ SAYIM</span>
+              <span className="text-[10px] opacity-80 hidden md:block">Stok Doğrulama</span>
             </button>
 
             <button 

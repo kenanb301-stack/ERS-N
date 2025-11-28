@@ -15,14 +15,16 @@ import Analytics from './components/Analytics';
 import Login from './components/Login';
 import DataBackupModal from './components/DataBackupModal';
 import CloudSetupModal from './components/CloudSetupModal';
-import { saveToSupabase, loadFromSupabase } from './services/supabase';
+import CycleCountModal from './components/CycleCountModal'; // IMPORT ADDED
+import { saveToSupabase, loadFromSupabase, clearDatabase } from './services/supabase';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState, User, CloudConfig } from './types';
 
 // Utility to generate simple ID
 const generateId = () => Math.random().toString(36).substring(2, 11);
+const generateShortId = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 
 function App() {
   // --- AUTH STATE ---
@@ -79,6 +81,7 @@ function App() {
   const [isBarcodePrinterOpen, setIsBarcodePrinterOpen] = useState(false);
   const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
   const [isCloudSetupOpen, setIsCloudSetupOpen] = useState(false);
+  const [isCycleCountOpen, setIsCycleCountOpen] = useState(false); // STATE ADDED
 
   // Global Scanner State
   const [isGlobalScannerOpen, setIsGlobalScannerOpen] = useState(false);
@@ -109,6 +112,29 @@ function App() {
       localStorage.removeItem('depopro_user');
     }
   }, [currentUser]);
+
+  // --- MIGRATION EFFECT: Generate Short IDs for old products ---
+  useEffect(() => {
+      const productsMissingShortId = products.some(p => !p.short_id);
+      
+      if (productsMissingShortId) {
+          console.log("Migrating products to include short_id...");
+          const updatedProducts = products.map(p => {
+              if (!p.short_id) {
+                  return { ...p, short_id: generateShortId() };
+              }
+              return p;
+          });
+          // Update state and save
+          setProducts(updatedProducts);
+          localStorage.setItem('depopro_products', JSON.stringify(updatedProducts));
+          
+          // Trigger cloud save if connected
+          if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
+              performCloudSave(updatedProducts, transactions);
+          }
+      }
+  }, []); // Run once on mount
 
   // --- AUTOMATIC CLOUD SYNC EFFECTS ---
   
@@ -208,12 +234,6 @@ function App() {
            const result = await loadFromSupabase(cloudConfig.supabaseUrl, cloudConfig.supabaseKey);
            
            if (result.success && result.data) {
-               // Verileri güncelle (Supabase kaynaklı veri her zaman daha güvenilirdir)
-               // Ancak, offline çalışma sırasında oluşturulmuş ve henüz gönderilmemiş veri varsa onu korumamız gerekir.
-               // Supabase 'load' işlemi tüm veriyi getirdiği için, bunu doğrudan set etmek en temiz yoldur.
-               // *Eğer PC'de yeni veri girdim ama henüz sunucuya gitmediyse, bu işlem onu silebilir.* 
-               // *Ancak Supabase çok hızlı olduğu için bu risk düşüktür.*
-               
                const cloudProducts = result.data.products || [];
                const cloudTransactions = result.data.transactions || [];
 
@@ -285,6 +305,35 @@ function App() {
           reader.onerror = () => reject(new Error("Dosya okunamadı"));
           reader.readAsText(file);
       });
+  };
+
+  const handleResetData = async () => {
+      if(!confirm("DİKKAT: Bu işlem tüm stokları, parçaları ve hareket geçmişini kalıcı olarak silecektir. Emin misiniz?")) return;
+      if(!confirm("SON UYARI: Hem telefonunuzdaki hem de buluttaki veriler silinecek. Fabrika ayarlarına dönülecek. Onaylıyor musunuz?")) return;
+
+      // 1. Clear Supabase if connected
+      if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
+          try {
+              const res = await clearDatabase(cloudConfig.supabaseUrl, cloudConfig.supabaseKey);
+              if (!res.success) {
+                  alert("Bulut silinemedi: " + res.message);
+                  return;
+              }
+          } catch (e) {
+              console.error("Cloud clear error", e);
+          }
+      }
+
+      // 2. Clear Local Storage
+      localStorage.removeItem('depopro_products');
+      localStorage.removeItem('depopro_transactions');
+      
+      // 3. Reset State (To Initial mock data or empty)
+      setProducts(INITIAL_PRODUCTS);
+      setTransactions(INITIAL_TRANSACTIONS);
+      
+      alert("Sistem başarıyla sıfırlandı.");
+      window.location.reload();
   };
   // ----------------------
 
@@ -434,10 +483,30 @@ function App() {
 
                   if (isNaN(qty)) return product;
 
+                  // CORRECTION tipi silinirse ne olur? Etkisini geri alırız.
+                  // Eğer CORRECTION +2 eklediyse, silerken -2 yaparız.
                   if (transactionToDelete.type === TransactionType.IN) {
                       newStock -= qty;
-                  } else {
+                  } else if (transactionToDelete.type === TransactionType.OUT) {
                       newStock += qty;
+                  } else if (transactionToDelete.type === TransactionType.CORRECTION) {
+                      // Correction miktar pozitifse eklemiştir, silerken çıkar.
+                      // Miktar negatifse çıkarmıştır, silerken ekle.
+                      // Logic: quantity field in transaction is always positive, but type implies direction?
+                      // Actually, for CORRECTION, we usually store the DELTA. 
+                      // But our Transaction struct stores abs quantity and Type IN/OUT usually.
+                      // Let's assume CORRECTION is treated carefully. For simplicity here:
+                      // If 'quantity' was added, remove it. If removed, add it.
+                      // Since we don't have signed quantity in interface easily, 
+                      // we might need to check description or implement signed logic.
+                      // For now, let's assume manual correction is same as IN/OUT logic in UI.
+                      // Wait, standard logic handles IN/OUT. If correction was +2 (IN), newStock -= 2.
+                      // If correction was -2 (OUT), newStock += 2.
+                      // We need to know if correction was treated as IN or OUT.
+                      // Currently `TransactionType.CORRECTION` is new.
+                      // We should probably rely on `previous_stock` and `new_stock` to know direction.
+                      const diff = (transactionToDelete.new_stock || 0) - (transactionToDelete.previous_stock || 0);
+                      newStock -= diff;
                   }
                   
                   let criticalSince = product.critical_since;
@@ -473,7 +542,8 @@ function App() {
 
   const handleEditTransactionClick = (transaction: Transaction) => {
       setEditingTransaction(transaction);
-      setModalType(transaction.type);
+      // If it's a correction, default to IN, but UI might need adjustment.
+      setModalType(transaction.type === TransactionType.CORRECTION ? TransactionType.IN : transaction.type);
       setPreSelectedBarcode('');
       setIsModalOpen(true);
   }
@@ -496,6 +566,7 @@ function App() {
         const newProduct: Product = {
             id: `p-${generateId()}`,
             ...data,
+            short_id: generateShortId(), // Generate SHORT ID on creation
             created_at: new Date().toISOString(),
             critical_since: data.current_stock <= data.min_stock_level ? new Date().toISOString() : undefined
         };
@@ -588,6 +659,7 @@ function App() {
       const newProducts: Product[] = newProductsData.map(p => ({
           id: `p-${generateId()}`,
           ...p,
+          short_id: generateShortId(), // Generate SHORT ID on bulk import
           created_at: new Date().toISOString(),
           critical_since: p.current_stock <= p.min_stock_level ? new Date().toISOString() : undefined
       }));
@@ -609,6 +681,47 @@ function App() {
 
     if (onSuccess) onSuccess();
   }
+
+  // 4. Cycle Count Logic
+  const handleCycleCountSubmit = (productId: string, countedQty: number) => {
+      const product = products.find(p => p.id === productId);
+      if (!product) return;
+
+      const diff = countedQty - product.current_stock;
+      const now = new Date().toISOString();
+
+      // Update Product
+      const updatedProducts = products.map(p => {
+          if (p.id === productId) {
+              return {
+                  ...p,
+                  current_stock: countedQty, // Update to actual physical count
+                  last_counted_at: now
+              };
+          }
+          return p;
+      });
+
+      // Create Correction Transaction if there is a difference
+      let updatedTransactions = [...transactions];
+      if (diff !== 0) {
+          const correctionTx: Transaction = {
+              id: `t-${generateId()}`,
+              product_id: productId,
+              product_name: product.product_name,
+              type: TransactionType.CORRECTION,
+              quantity: Math.abs(diff),
+              date: now,
+              description: `SAYIM FARKI: Sistemde ${product.current_stock}, Sayılan ${countedQty}. Fark: ${diff > 0 ? '+' : ''}${diff}`,
+              created_by: currentUser?.name || 'Sistem',
+              previous_stock: product.current_stock,
+              new_stock: countedQty
+          };
+          updatedTransactions = [correctionTx, ...updatedTransactions];
+      }
+
+      saveData(updatedProducts, updatedTransactions);
+  };
 
   // YENİ: Raporlanan ürünlerin işaretlenmesi
   const handleReportSent = (productIds: string[]) => {
@@ -753,6 +866,14 @@ function App() {
                         <DownloadCloud size={18} className="text-slate-500" />
                         Yerel Yedek
                     </button>
+                    
+                    <button 
+                        onClick={handleResetData}
+                        className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all border border-transparent hover:border-red-100"
+                    >
+                        <AlertTriangle size={18} />
+                        Sıfırla
+                    </button>
                  </>
              )}
 
@@ -870,6 +991,7 @@ function App() {
                     onViewNegativeStock={() => setCurrentView('NEGATIVE_STOCK')}
                     onOrderSimulation={() => setIsOrderSimModalOpen(true)}
                     onScan={handleGlobalScanClick}
+                    onCycleCount={() => setIsCycleCountOpen(true)}
                     onReportSent={handleReportSent}
                     currentUser={currentUser}
                     isCloudEnabled={!!cloudConfig?.supabaseUrl}
@@ -1004,6 +1126,13 @@ function App() {
                 onClose={() => setIsCloudSetupOpen(false)}
                 onSave={handleSaveCloudConfig}
                 currentConfig={cloudConfig}
+            />
+
+            <CycleCountModal
+                isOpen={isCycleCountOpen}
+                onClose={() => setIsCycleCountOpen(false)}
+                products={products}
+                onSubmitCount={handleCycleCountSubmit}
             />
         </>
       )}

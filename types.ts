@@ -2,6 +2,7 @@
 export enum TransactionType {
   IN = 'IN',
   OUT = 'OUT',
+  CORRECTION = 'CORRECTION', // Sayım düzeltmesi
 }
 
 export interface Product {
@@ -14,9 +15,11 @@ export interface Product {
   unit: string;
   current_stock: number;
   barcode?: string; // Barkod içeriği
+  short_id?: string; // 6 Haneli Kısa Kod (Sayısal)
   created_at?: string;
   critical_since?: string; // Kritik seviyeye düştüğü tarih (ISO String)
   last_alert_sent_at?: string; // Rapor maili gönderildiği tarih (ISO String)
+  last_counted_at?: string; // Son sayım tarihi (ISO String)
 }
 
 export interface Transaction {

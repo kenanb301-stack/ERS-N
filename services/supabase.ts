@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { Product, Transaction } from '../types';
 
@@ -176,4 +175,33 @@ export const saveToSupabase = async (url: string, key: string, products: Product
 
     return { success: false, message: 'Kaydetme hatası: ' + msg };
   }
+};
+
+// DELETE ALL: Clears all data in tables
+export const clearDatabase = async (url: string, key: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        const client = initSupabase(url, key);
+        if (!client) return { success: false, message: 'Supabase istemcisi başlatılamadı.' };
+
+        // 1. Delete all transactions
+        const { error: txError } = await client
+            .from('transactions')
+            .delete()
+            .neq('id', '0'); // Delete everything where id is not '0' (which is everything)
+
+        if (txError) throw txError;
+
+        // 2. Delete all products
+        const { error: prError } = await client
+            .from('products')
+            .delete()
+            .neq('id', '0');
+
+        if (prError) throw prError;
+
+        return { success: true, message: 'Bulut veritabanı temizlendi.' };
+    } catch (error: any) {
+        console.error("Supabase Clear Error:", error);
+        return { success: false, message: 'Temizleme hatası: ' + error.message };
+    }
 };

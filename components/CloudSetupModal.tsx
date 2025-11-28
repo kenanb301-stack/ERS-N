@@ -58,9 +58,11 @@ create table if not exists products (
   unit text,
   current_stock numeric,
   barcode text,
+  short_id text, -- Kısa barkod için 6 haneli kod
   created_at text,
   critical_since text,
-  last_alert_sent_at text
+  last_alert_sent_at text,
+  last_counted_at text -- Yeni: Son sayım tarihi
 );
 
 create table if not exists transactions (
@@ -79,6 +81,10 @@ create table if not exists transactions (
 -- ÖNEMLİ: Bağlantı hatalarını önlemek için güvenlik duvarını (RLS) kaldırıyoruz --
 alter table products disable row level security;
 alter table transactions disable row level security;
+
+-- Eğer tablo zaten varsa yeni sütunları eklemek için (Opsiyonel) --
+alter table products add column if not exists last_counted_at text;
+alter table products add column if not exists short_id text;
   `.trim();
 
   const handleCopy = () => {
