@@ -33,9 +33,27 @@ function doGet(e) {
   var sheet = db.getSheetByName("Data") || db.insertSheet("Data");
   
   if (action == "load") {
-    var data = sheet.getRange("A1").getValue();
-    if (!data) return ContentService.createTextOutput(JSON.stringify({status: "error", message: "Veri yok"}));
-    return ContentService.createTextOutput(JSON.stringify({status: "success", data: JSON.parse(data)})).setMimeType(ContentService.MimeType.JSON);
+    // Veriyi okurken A sütunundaki tüm parçaları alıp birleştiriyoruz
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 1) return ContentService.createTextOutput(JSON.stringify({status: "error", message: "Veri yok"})).setMimeType(ContentService.MimeType.JSON);
+
+    var range = sheet.getRange(1, 1, lastRow, 1);
+    var values = range.getValues();
+    var fullJson = "";
+
+    // Parçaları birleştir (Chunk Reassembly)
+    for (var i = 0; i < values.length; i++) {
+      fullJson += values[i][0];
+    }
+
+    if (!fullJson) return ContentService.createTextOutput(JSON.stringify({status: "error", message: "Veri boş"})).setMimeType(ContentService.MimeType.JSON);
+
+    try {
+      var parsedData = JSON.parse(fullJson);
+      return ContentService.createTextOutput(JSON.stringify({status: "success", data: parsedData})).setMimeType(ContentService.MimeType.JSON);
+    } catch (e) {
+      return ContentService.createTextOutput(JSON.stringify({status: "error", message: "JSON Parse Hatası"})).setMimeType(ContentService.MimeType.JSON);
+    }
   }
 }
 
@@ -46,10 +64,26 @@ function doPost(e) {
     var sheet = db.getSheetByName("Data") || db.insertSheet("Data");
     
     if (json.action == "save") {
-      // Veriyi tek bir hücreye sıkıştırılmış JSON olarak kaydet (En güvenli yöntem)
-      sheet.getRange("A1").setValue(JSON.stringify(json.data));
-      // Yedekleme için tarih at
+      var dataStr = JSON.stringify(json.data);
+      var CHUNK_SIZE = 45000; // Google Hücre Limiti 50k'dır. Güvenlik için 45k yapıyoruz.
+      var chunks = [];
+
+      // Veriyi parçalara böl (Chunking)
+      for (var i = 0; i < dataStr.length; i += CHUNK_SIZE) {
+        chunks.push([dataStr.substring(i, i + CHUNK_SIZE)]);
+      }
+
+      // Eski veriyi temizle (Sadece A sütunu)
+      sheet.getRange("A:A").clearContent();
+
+      // Yeni parçaları A1, A2, A3... hücrelerine alt alta yaz
+      if (chunks.length > 0) {
+        sheet.getRange(1, 1, chunks.length, 1).setValues(chunks);
+      }
+
+      // Yedekleme tarihini B1'e yaz (Bilgi amaçlı)
       sheet.getRange("B1").setValue(new Date());
+
       return ContentService.createTextOutput(JSON.stringify({status: "success"})).setMimeType(ContentService.MimeType.JSON);
     }
   } catch(err) {
@@ -58,7 +92,7 @@ function doPost(e) {
 }
     `;
     navigator.clipboard.writeText(code.trim());
-    alert("Kod kopyalandı!");
+    alert("YENİ Kod kopyalandı! Lütfen Google Apps Script'e yapıştırıp YENİ DAĞITIM oluşturun.");
   };
 
   return (
@@ -97,13 +131,13 @@ function doPost(e) {
             {showGuide && (
                 <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300 border-l-2 border-slate-200 dark:border-slate-600 pl-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-r-lg">
                     <div className="space-y-1">
-                        <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 1: Kod Hazırlığı</span>
+                        <span className="font-bold block text-slate-800 dark:text-white text-base">Adım 1: Kod Hazırlığı (GÜNCELLENDİ)</span>
                         <a href="https://sheets.new" target="_blank" className="text-blue-600 hover:underline inline-flex items-center gap-1 font-bold">
                             sheets.new <ExternalLink size={12}/>
                         </a> adresine gidin. Üst menüden <strong>Uzantılar &gt; Apps Script</strong> seçin.
                         <br/>Açılan sayfadaki kodları silin ve aşağıdaki butona tıklayıp kopyaladığınız kodu yapıştırın.
-                        <button onClick={copyScriptCode} className="mt-2 w-full py-2 bg-slate-200 dark:bg-slate-600 rounded text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-300 dark:hover:bg-slate-500">
-                            <Copy size={14} /> Kodu Kopyala
+                        <button onClick={copyScriptCode} className="mt-2 w-full py-2 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded text-xs font-bold flex items-center justify-center gap-2 hover:bg-emerald-200 dark:hover:bg-emerald-900/50">
+                            <Copy size={14} /> Yeni Kodu Kopyala
                         </button>
                     </div>
 
