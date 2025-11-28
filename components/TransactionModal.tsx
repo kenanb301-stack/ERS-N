@@ -94,13 +94,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (p.barcode && p.barcode.includes(searchTerm)) ||
     (p.id && p.id === searchTerm) ||
-    (p.short_id && p.short_id === searchTerm) ||
+    (p.short_id && String(p.short_id).includes(searchTerm)) || // Allow typing partial short ID
     (p.location && p.location.toLowerCase().includes(searchTerm.toLowerCase())) // Allow finding by typing location
   );
 
   const handleProductSelect = (product: Product) => {
     setProductId(product.id);
-    // Input'a Parça Kodunu yazıyoruz (Kullanıcı Reyon barkodu okutsa bile buraya Parça Kodu gelir)
+    // Input'a Parça Kodunu yazıyoruz (Kullanıcı Reyon barkodu veya Kısa Kod okutsa bile buraya Parça Kodu gelir)
     setSearchTerm(product.part_code || product.product_name);
     setScannedBarcode(product.barcode || '');
     setIsDropdownOpen(false);
@@ -116,13 +116,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       // 1. Barcode field
       // 2. Part Code
       // 3. System ID
-      // 4. Short ID (6 Digit) - NEW
+      // 4. Short ID (6 Digit) - Fixed Type Mismatch
       // 5. LOCATION (Reyon)
       const product = products.find(p => 
           (p.barcode === searchCode) || 
           (p.part_code === searchCode) || 
           (p.id === searchCode) ||
-          (p.short_id === searchCode) || 
+          (p.short_id && String(p.short_id).trim() === searchCode) || 
           (p.location === searchCode)
       );
       
