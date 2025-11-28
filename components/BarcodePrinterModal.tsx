@@ -10,7 +10,7 @@ interface BarcodePrinterModalProps {
   products: Product[];
 }
 
-type BarcodeSource = 'PART_CODE' | 'ID' | 'LOCATION' | 'SHORT_ID';
+type BarcodeSource = 'PART_CODE' | 'SHORT_ID';
 
 const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClose, products }) => {
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
@@ -64,15 +64,13 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         validProducts.forEach(product => {
             try {
                 let codeToUse = "";
-                let format = "CODE128"; // Default format
+                // Default JsBarcode auto-selects best format (Code128B/C)
+                let format = "CODE128"; 
                 
-                if (barcodeSource === 'ID') {
-                    codeToUse = product.id;
-                } else if (barcodeSource === 'SHORT_ID') {
-                    codeToUse = product.short_id || "";
-                    if (codeToUse) format = "CODE128C"; // Compress numeric
-                } else if (barcodeSource === 'LOCATION') {
-                    codeToUse = product.location || "";
+                if (barcodeSource === 'SHORT_ID') {
+                    // Eğer ürünün short_id'si varsa kullan, yoksa geçici bir tane üret (Görsel için)
+                    codeToUse = product.short_id || Math.floor(100000 + Math.random() * 900000).toString();
+                    // codeToUse = product.short_id || ""; // Strict mode (eski)
                 } else {
                     // Default to Part Code, fallback to barcode field, fallback to ID
                     codeToUse = product.part_code || product.barcode || product.id;
@@ -232,8 +230,6 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                      >
                          <option value="PART_CODE">Parça Kodu (Varsayılan)</option>
                          <option value="SHORT_ID">Süper Kısa (6 Hane)</option>
-                         <option value="ID">Sistem ID</option>
-                         <option value="LOCATION">Reyon Kodu</option>
                      </select>
                  </div>
 
@@ -260,9 +256,8 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
              
              {/* Info Tip */}
              <div className="hidden lg:flex items-center gap-2 text-xs text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-lg border border-amber-100 dark:border-amber-900/30">
-                 {barcodeSource === 'PART_CODE' && "Uzun parça kodları sığmıyorsa 'Süper Kısa' veya 'Dar' seçin."}
+                 {barcodeSource === 'PART_CODE' && "Uzun parça kodları sığmıyorsa 'Süper Kısa' seçin."}
                  {barcodeSource === 'SHORT_ID' && <><ShieldCheck size={14}/> 6 haneli kısa kod her zaman etikete sığar. Önerilir.</>}
-                 {barcodeSource === 'LOCATION' && <><MapPin size={14}/> Dikkat: Reyon barkodu benzersiz ürün tanımlamaz.</>}
              </div>
         </div>
 

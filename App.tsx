@@ -24,7 +24,7 @@ import { Product, Transaction, TransactionType, ViewState, User, CloudConfig } f
 const generateId = () => Math.random().toString(36).substring(2, 11);
 const generateShortId = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.4.1";
 
 function App() {
   // --- AUTH STATE ---
@@ -114,7 +114,10 @@ function App() {
   }, [currentUser]);
 
   // --- MIGRATION EFFECT: Generate Short IDs for old products ---
+  // Bu useEffect artık products değiştiğinde de çalışacak (Buluttan veri gelince düzeltmek için)
   useEffect(() => {
+      if (products.length === 0) return;
+
       const productsMissingShortId = products.some(p => !p.short_id);
       
       if (productsMissingShortId) {
@@ -125,16 +128,20 @@ function App() {
               }
               return p;
           });
-          // Update state and save
+          
+          // Update state and save local
           setProducts(updatedProducts);
           localStorage.setItem('depopro_products', JSON.stringify(updatedProducts));
           
-          // Trigger cloud save if connected
+          // Trigger cloud save ONLY if we are connected
+          // We use a timeout to avoid immediate re-render loops or race conditions with load
           if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
-              performCloudSave(updatedProducts, transactions);
+              setTimeout(() => {
+                  performCloudSave(updatedProducts, transactions);
+              }, 2000);
           }
       }
-  }, []); // Run once on mount
+  }, [products.length, cloudConfig]); // Length değişimi veya config değişimi tetiklesin
 
   // --- AUTOMATIC CLOUD SYNC EFFECTS ---
   
@@ -144,10 +151,10 @@ function App() {
           // App açılışında otomatik çek
           performCloudLoad(true);
 
-          // Her 30 saniyede bir arka planda kontrol et
+          // Her 60 saniyede bir arka planda kontrol et
           const intervalId = setInterval(() => {
               performCloudLoad(true);
-          }, 30000);
+          }, 60000);
 
           return () => clearInterval(intervalId);
       }
@@ -483,28 +490,11 @@ function App() {
 
                   if (isNaN(qty)) return product;
 
-                  // CORRECTION tipi silinirse ne olur? Etkisini geri alırız.
-                  // Eğer CORRECTION +2 eklediyse, silerken -2 yaparız.
                   if (transactionToDelete.type === TransactionType.IN) {
                       newStock -= qty;
                   } else if (transactionToDelete.type === TransactionType.OUT) {
                       newStock += qty;
                   } else if (transactionToDelete.type === TransactionType.CORRECTION) {
-                      // Correction miktar pozitifse eklemiştir, silerken çıkar.
-                      // Miktar negatifse çıkarmıştır, silerken ekle.
-                      // Logic: quantity field in transaction is always positive, but type implies direction?
-                      // Actually, for CORRECTION, we usually store the DELTA. 
-                      // But our Transaction struct stores abs quantity and Type IN/OUT usually.
-                      // Let's assume CORRECTION is treated carefully. For simplicity here:
-                      // If 'quantity' was added, remove it. If removed, add it.
-                      // Since we don't have signed quantity in interface easily, 
-                      // we might need to check description or implement signed logic.
-                      // For now, let's assume manual correction is same as IN/OUT logic in UI.
-                      // Wait, standard logic handles IN/OUT. If correction was +2 (IN), newStock -= 2.
-                      // If correction was -2 (OUT), newStock += 2.
-                      // We need to know if correction was treated as IN or OUT.
-                      // Currently `TransactionType.CORRECTION` is new.
-                      // We should probably rely on `previous_stock` and `new_stock` to know direction.
                       const diff = (transactionToDelete.new_stock || 0) - (transactionToDelete.previous_stock || 0);
                       newStock -= diff;
                   }
