@@ -50,6 +50,7 @@ export interface User {
 }
 
 export interface CloudConfig {
-  scriptUrl: string;
+  apiKey: string;
+  binId: string;
   lastSync?: string;
 }

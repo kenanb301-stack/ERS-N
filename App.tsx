@@ -15,14 +15,14 @@ import Analytics from './components/Analytics';
 import Login from './components/Login';
 import DataBackupModal from './components/DataBackupModal';
 import CloudSetupModal from './components/CloudSetupModal';
-import { saveToCloud, loadFromCloud } from './services/googleSheets';
+import { saveToCloud, loadFromCloud } from './services/jsonbin';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState, User, CloudConfig } from './types';
 
 // Utility to generate simple ID
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 
 function App() {
   // --- AUTH STATE ---
@@ -114,18 +114,18 @@ function App() {
   
   // 1. Initial Load & Periodic Polling
   useEffect(() => {
-      if (cloudConfig?.scriptUrl && currentUser) {
+      if (cloudConfig?.apiKey && cloudConfig?.binId && currentUser) {
           // App açılışında otomatik çek
           performCloudLoad(true);
 
-          // Her 60 saniyede bir arka planda kontrol et
+          // Her 30 saniyede bir arka planda kontrol et (JSONBin hızlıdır)
           const intervalId = setInterval(() => {
               performCloudLoad(true);
-          }, 60000);
+          }, 30000);
 
           return () => clearInterval(intervalId);
       }
-  }, [cloudConfig?.scriptUrl, currentUser]);
+  }, [cloudConfig?.apiKey, cloudConfig?.binId, currentUser]);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
@@ -143,8 +143,8 @@ function App() {
 
   // --- CLOUD OPERATIONS ---
 
-  const handleSaveCloudConfig = (url: string) => {
-      const newConfig = { scriptUrl: url };
+  const handleSaveCloudConfig = (apiKey: string, binId: string) => {
+      const newConfig = { apiKey, binId };
       setCloudConfig(newConfig);
       localStorage.setItem('depopro_cloud_config', JSON.stringify(newConfig));
       // Config kaydedilince hemen bir çekme işlemi yap
@@ -166,22 +166,22 @@ function App() {
         localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
       } catch (err) {
         console.error("LocalStorage Save Error:", err);
-        alert("HATA: Veriler tarayıcı hafızasına yazılamadı. Cihaz hafızası dolmuş olabilir. Lütfen bazı gereksiz uygulamaları kapatın veya temizleyin.");
+        alert("HATA: Veriler tarayıcı hafızasına yazılamadı. Cihaz hafızası dolmuş olabilir.");
         return;
       }
 
       // 3. Trigger Auto Cloud Sync (Fire and forget)
-      if (cloudConfig?.scriptUrl) {
+      if (cloudConfig?.apiKey && cloudConfig?.binId) {
           performCloudSave(newProducts, newTransactions, now);
       }
   };
 
   const performCloudSave = async (currentProducts: Product[], currentTransactions: Transaction[], timestamp: string) => {
-      if (!cloudConfig?.scriptUrl) return;
+      if (!cloudConfig?.apiKey || !cloudConfig?.binId) return;
 
       setSyncStatus('SYNCING');
       try {
-          const result = await saveToCloud(cloudConfig.scriptUrl, {
+          const result = await saveToCloud(cloudConfig.apiKey, cloudConfig.binId, {
               products: currentProducts,
               transactions: currentTransactions,
               lastUpdated: timestamp
@@ -193,6 +193,7 @@ function App() {
               // 3 saniye sonra success durumunu idle'a çek
               setTimeout(() => setSyncStatus('IDLE'), 3000);
           } else {
+              console.error(result.message);
               setSyncStatus('ERROR');
           }
       } catch (e) {
@@ -202,12 +203,12 @@ function App() {
   };
 
   const performCloudLoad = async (silent: boolean = false) => {
-       if (!cloudConfig?.scriptUrl) return;
+       if (!cloudConfig?.apiKey || !cloudConfig?.binId) return;
 
        if (!silent) setSyncStatus('SYNCING');
 
        try {
-           const result = await loadFromCloud(cloudConfig.scriptUrl);
+           const result = await loadFromCloud(cloudConfig.apiKey, cloudConfig.binId);
            
            if (result.success && result.data) {
                // TIMESTAMP CHECK
@@ -216,18 +217,18 @@ function App() {
 
                // If local data exists and is NEWER than cloud data, DO NOT OVERWRITE
                if (localLastUpdate && cloudLastUpdate && new Date(localLastUpdate) > new Date(cloudLastUpdate)) {
-                   console.log("Local data is newer than cloud data. Skipping overwrite to prevent data loss.");
-                   if (!silent) setSyncStatus('SUCCESS'); // It's technically success, we just chose not to sync
+                   console.log("Local data is newer. Skipping cloud load.");
+                   if (!silent) setSyncStatus('SUCCESS'); 
                    return;
                }
 
                // Gelen veriyi local state ile güncelle
-               setProducts(result.data.products);
-               setTransactions(result.data.transactions);
+               setProducts(result.data.products || []);
+               setTransactions(result.data.transactions || []);
                
                // LocalStorage'ı da güncelle
-               localStorage.setItem('depopro_products', JSON.stringify(result.data.products));
-               localStorage.setItem('depopro_transactions', JSON.stringify(result.data.transactions));
+               localStorage.setItem('depopro_products', JSON.stringify(result.data.products || []));
+               localStorage.setItem('depopro_transactions', JSON.stringify(result.data.transactions || []));
                // Sync local timestamp to match cloud
                if (cloudLastUpdate) {
                    localStorage.setItem('depopro_last_updated', cloudLastUpdate);
@@ -235,7 +236,7 @@ function App() {
                
                setSyncStatus('SUCCESS');
                setLastSyncTime(new Date().toLocaleTimeString());
-               if (!silent) alert("Veriler güncellendi.");
+               if (!silent) alert("Veriler buluttan güncellendi.");
                setTimeout(() => setSyncStatus('IDLE'), 3000);
            } else {
                if (!silent) alert(result.message);
@@ -718,17 +719,17 @@ function App() {
                             {syncStatus === 'SYNCING' && <Loader2 size={16} className="text-blue-500 animate-spin" />}
                             {syncStatus === 'SUCCESS' && <CheckCircle2 size={16} className="text-green-500" />}
                             {syncStatus === 'ERROR' && <WifiOff size={16} className="text-red-500" />}
-                            {syncStatus === 'IDLE' && <Cloud size={16} className={cloudConfig?.scriptUrl ? "text-blue-500" : "text-slate-400"} />}
+                            {syncStatus === 'IDLE' && <Cloud size={16} className={cloudConfig?.apiKey ? "text-blue-500" : "text-slate-400"} />}
                             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                                 {syncStatus === 'SYNCING' ? 'Eşitleniyor...' : 
                                  syncStatus === 'SUCCESS' ? 'Eşitlendi' :
                                  syncStatus === 'ERROR' ? 'Hata' : 
-                                 cloudConfig?.scriptUrl ? 'Otomatik' : 'Yerel Mod'}
+                                 cloudConfig?.apiKey ? 'Otomatik' : 'Yerel Mod'}
                             </span>
                         </div>
                         <button 
                             onClick={() => performCloudLoad(false)}
-                            disabled={syncStatus === 'SYNCING' || !cloudConfig?.scriptUrl}
+                            disabled={syncStatus === 'SYNCING' || !cloudConfig?.apiKey}
                             title="Zorla Eşitle"
                         >
                             <RefreshCw size={14} className={`text-slate-400 hover:text-blue-500 ${syncStatus === 'SYNCING' ? 'animate-spin' : ''}`} />
@@ -737,10 +738,10 @@ function App() {
 
                     <button 
                         onClick={() => setIsCloudSetupOpen(true)}
-                        className={`w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium border ${!cloudConfig?.scriptUrl ? 'bg-amber-50 text-amber-600 border-amber-200 animate-pulse' : 'text-slate-500 hover:bg-slate-100 border-transparent'}`}
+                        className={`w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium border ${!cloudConfig?.apiKey ? 'bg-amber-50 text-amber-600 border-amber-200 animate-pulse' : 'text-slate-500 hover:bg-slate-100 border-transparent'}`}
                     >
                         <Cloud size={14} /> 
-                        {!cloudConfig?.scriptUrl ? 'Bulut Kurulumu Yap' : 'Drive Ayarları'}
+                        {!cloudConfig?.apiKey ? 'Bulut Kurulumu Yap' : 'Bulut Ayarları'}
                     </button>
                  </>
              )}
@@ -794,11 +795,11 @@ function App() {
          </div>
         <div className="flex items-center gap-3">
              {currentUser.role === 'ADMIN' && (
-                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-1" onClick={() => !cloudConfig?.scriptUrl && setIsCloudSetupOpen(true)}>
+                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-1" onClick={() => !cloudConfig?.apiKey && setIsCloudSetupOpen(true)}>
                     {syncStatus === 'SYNCING' ? <Loader2 size={14} className="animate-spin text-blue-500" /> : 
                      syncStatus === 'SUCCESS' ? <CheckCircle2 size={14} className="text-green-500" /> :
                      syncStatus === 'ERROR' ? <WifiOff size={14} className="text-red-500" /> :
-                     cloudConfig?.scriptUrl ? <Cloud size={14} className="text-blue-500" /> : <Cloud size={14} className="text-slate-300" />
+                     cloudConfig?.apiKey ? <Cloud size={14} className="text-blue-500" /> : <Cloud size={14} className="text-slate-300" />
                     }
                  </div>
              )}
@@ -824,7 +825,7 @@ function App() {
                     <div className="flex gap-2">
                         {/* Mobile Only Extra Sync Buttons */}
                         <div className="md:hidden flex gap-2">
-                            {cloudConfig?.scriptUrl ? (
+                            {cloudConfig?.apiKey ? (
                                 <button 
                                     onClick={() => performCloudLoad(false)}
                                     className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1"
@@ -873,7 +874,7 @@ function App() {
                     onScan={handleGlobalScanClick}
                     onReportSent={handleReportSent}
                     currentUser={currentUser}
-                    isCloudEnabled={!!cloudConfig?.scriptUrl}
+                    isCloudEnabled={!!cloudConfig?.apiKey}
                     onOpenCloudSetup={() => setIsCloudSetupOpen(true)}
                 />
             )}
@@ -1004,7 +1005,7 @@ function App() {
                 isOpen={isCloudSetupOpen}
                 onClose={() => setIsCloudSetupOpen(false)}
                 onSave={handleSaveCloudConfig}
-                currentUrl={cloudConfig?.scriptUrl}
+                currentConfig={cloudConfig}
             />
         </>
       )}
