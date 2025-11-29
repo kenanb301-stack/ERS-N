@@ -1,6 +1,5 @@
-
 import React, { useEffect, useState } from 'react';
-import { X, Printer, CheckSquare, Square, Search, Filter, Check, ShieldCheck } from 'lucide-react';
+import { X, Printer, CheckSquare, Square, Search, Filter, Check, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 import { Product } from '../types';
 import JsBarcode from 'jsbarcode';
 
@@ -42,13 +41,13 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         
         validProducts.forEach(product => {
             try {
-                // STRICT MODE: ONLY USE EXISTING SHORT_ID
-                // Never generate random numbers here, as it changes every time the modal opens.
                 const codeToUse = product.short_id;
 
                 if (codeToUse) {
                     const ctx = canvas.getContext('2d');
-                    ctx?.clearRect(0,0, canvas.width, canvas.height);
+                    if (!ctx) throw new Error("Canvas context not available");
+                    
+                    ctx.clearRect(0,0, canvas.width, canvas.height);
 
                     JsBarcode(canvas, codeToUse, {
                         format: "CODE128", 
@@ -62,9 +61,12 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                         background: "#ffffff"
                     });
                     newImages[product.id] = canvas.toDataURL("image/png");
+                } else {
+                    newImages[product.id] = 'MISSING_ID'; // Özel durum
                 }
             } catch (e) {
-                console.warn(`Barcode error ${product.product_name}:`, e);
+                console.warn(`Barcode error for ${product.product_name}:`, e);
+                newImages[product.id] = 'ERROR'; // Hata durumu
             }
         });
         
@@ -279,10 +281,23 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                                     
                                     {/* Ortada Kısa ID Barkodu */}
                                     <div className="flex-1 w-full flex items-center justify-center bg-slate-50 rounded-lg p-1 overflow-hidden">
-                                        {imgSrc ? (
+                                        {imgSrc === 'MISSING_ID' ? (
+                                            <div className="text-center">
+                                                <Loader2 size={16} className="text-amber-500 animate-spin mx-auto"/>
+                                                <span className="text-[9px] text-amber-500 font-bold">Kod Üretiliyor...</span>
+                                            </div>
+                                        ) : imgSrc === 'ERROR' ? (
+                                            <div className="text-center">
+                                                <AlertTriangle size={16} className="text-red-500 mx-auto"/>
+                                                <span className="text-[9px] text-red-500 font-bold">Barkod Hatası</span>
+                                            </div>
+                                        ) : imgSrc ? (
                                             <img src={imgSrc} alt="barcode" className="max-w-full max-h-full object-contain mix-blend-multiply" />
                                         ) : (
-                                            <span className="text-[10px] text-red-400 font-bold animate-pulse">KOD BEKLENİYOR</span>
+                                            <div className="text-center">
+                                                 <Loader2 size={16} className="text-slate-400 animate-spin mx-auto"/>
+                                                 <span className="text-[9px] text-slate-400">Yükleniyor</span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -310,14 +325,14 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 
                 {/* 2. Orta Kısım: BARKOD (Short ID verisini içerir) */}
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', flex: 1, overflow: 'hidden' }}>
-                    {barcodeImages[product.id] ? (
+                    {barcodeImages[product.id] && !['MISSING_ID', 'ERROR'].includes(barcodeImages[product.id]) ? (
                          <img 
                             src={barcodeImages[product.id]}
                             style={{ maxWidth: '100%', maxHeight: '25mm' }}
                             alt="barcode"
                         />
                     ) : (
-                        <div style={{ fontSize: '8pt' }}>KOD BEKLENİYOR...</div>
+                        <div style={{ fontSize: '8pt' }}>KOD OLUŞTURULAMADI</div>
                     )}
                 </div>
             </div>

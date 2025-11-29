@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw, CheckCircle2, Loader2, WifiOff, Info } from 'lucide-react';
 import Dashboard from './components/Dashboard';
@@ -122,17 +121,21 @@ function App() {
       
       if (productsMissingShortId) {
           console.log("Migrating products to include persistent short_id...");
+          let hasNewIds = false;
           const updatedProducts = products.map(p => {
               if (!p.short_id) {
+                  hasNewIds = true;
                   return { ...p, short_id: generateShortId() };
               }
               return p;
           });
           
-          // Use CENTRALIZED save to ensure it goes to cloud immediately
-          saveData(updatedProducts, transactions);
+          if (hasNewIds) {
+            // Use CENTRALIZED save to ensure it goes to cloud immediately
+            saveData(updatedProducts, transactions);
+          }
       }
-  }, [products.length, cloudConfig]); // Length değişimi veya config değişimi tetiklesin
+  }, [products]); // Her ürün güncellemesinde kontrol et.
 
   // --- AUTOMATIC CLOUD SYNC EFFECTS ---
   
