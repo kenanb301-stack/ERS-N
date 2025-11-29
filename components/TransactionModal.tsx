@@ -63,9 +63,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               if (isScannerInput) {
                   barcodeBuffer.current += e.key;
               } else {
+                  // Buffer reset logic can be relaxed or strict
                   if (now - lastKeyTime.current > 100) {
                       barcodeBuffer.current = ''; 
                   }
+                  // Allow manual typing if not scanner speed
+                  barcodeBuffer.current += e.key;
               }
           }
       };
@@ -93,7 +96,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             setProductId(product.id);
             setFoundProduct(product);
             setPartCodeInput(product.part_code || product.product_name || '');
-            setBarcodeInput(product.short_id || product.barcode || '');
+            setBarcodeInput(product.short_id ? String(product.short_id) : (product.barcode || ''));
         }
         
         setError('');
@@ -136,6 +139,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       let product = products.find(p => String(p.short_id).trim() === cleanCode);
       if (!product) product = products.find(p => p.barcode === cleanCode);
       if (!product) product = products.find(p => p.part_code === cleanCode);
+      
+      // Reyon kodunu da kontrol et (opsiyonel)
       if (!product) product = products.find(p => p.location === cleanCode);
 
       if (product) {
@@ -155,7 +160,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     
     // Fill Fields
     setPartCodeInput(product.part_code || product.product_name);
-    setBarcodeInput(product.short_id || product.barcode || '');
+    // Barkod alanını sadece boşsa doldur, kullanıcı zaten doğru barkodu girdiyse değiştirmene gerek yok
+    // Ancak ürün dropdown'dan seçildiyse doldur.
+    setBarcodeInput(product.short_id ? String(product.short_id) : (product.barcode || ''));
     
     setIsDropdownOpen(false);
     setError('');
@@ -172,15 +179,21 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       const val = e.target.value;
       setBarcodeInput(val);
 
-      if (val.length >= 1) {
-          const product = products.find(p => String(p.short_id) === val);
+      const cleanVal = val.trim();
+
+      if (cleanVal.length > 0) {
+          const product = products.find(p => String(p.short_id).trim() === cleanVal);
+          
           if (product) {
-              selectProduct(product);
+              setProductId(product.id);
+              setFoundProduct(product);
+              setPartCodeInput(product.part_code || product.product_name || '');
+              setError('');
           } else {
-              // Eşleşme bozulursa seçimi kaldır
+              // Eşleşme bozulursa seçimi kaldır ama yazmaya izin ver
               setProductId('');
               setFoundProduct(null);
-              setPartCodeInput('');
+              setPartCodeInput(''); 
           }
       } else {
           resetForm();
@@ -193,10 +206,18 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       setPartCodeInput(val);
       setIsDropdownOpen(true);
 
-      if (val === '') {
-          setBarcodeInput('');
-          setProductId('');
-          setFoundProduct(null);
+      // Tam eşleşme kontrolü (Opsiyonel: Kullanıcı tam kodu yazarsa otomatik barkodu getir)
+      const exactMatch = products.find(p => (p.part_code || '').toLowerCase() === val.trim().toLowerCase());
+      if (exactMatch) {
+          setProductId(exactMatch.id);
+          setFoundProduct(exactMatch);
+          setBarcodeInput(exactMatch.short_id ? String(exactMatch.short_id) : '');
+      } else {
+          if (productId) {
+              setProductId('');
+              setFoundProduct(null);
+              setBarcodeInput('');
+          }
       }
   };
 
@@ -208,7 +229,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!productId) {
-      setError('Lütfen listeden geçerli bir parça seçin veya barkod okutun.');
+      setError('Lütfen geçerli bir parça seçin veya barkod okutun.');
       return;
     }
     if (!quantity || Number(quantity) <= 0) {
@@ -229,7 +250,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const selectedProduct = products.find(p => p.id === productId);
   const willBeNegative = !transactionToEdit && type === TransactionType.OUT && selectedProduct && quantity && (selectedProduct.current_stock - Number(quantity) < 0);
 
-  // Filter products based on Part Code Input
+  // Filter products based on Part Code Input for Dropdown
   const filteredProducts = products.filter(p => 
     (p.part_code && p.part_code.toLowerCase().includes(deferredPartCodeInput.toLowerCase())) ||
     p.product_name.toLowerCase().includes(deferredPartCodeInput.toLowerCase()) || 
@@ -295,14 +316,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 
                 {/* 1. Barkod Kodu Alanı */}
                 <div>
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Barkod Kodu (6 Hane)</label>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Barkod Kodu</label>
                     <div className="relative">
                         <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input
                             type="text"
                             value={barcodeInput}
                             onChange={handleBarcodeInput}
-                            placeholder="Okutunuz..."
+                            placeholder="123456"
                             autoFocus={!defaultBarcode && !transactionToEdit}
                             className={`w-full pl-9 pr-2 py-3 rounded-lg border outline-none transition-all font-mono font-bold text-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
                         />
@@ -320,7 +341,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                                 value={partCodeInput}
                                 onChange={handlePartCodeInput}
                                 onFocus={() => setIsDropdownOpen(true)}
-                                placeholder="Parça Kodu..."
+                                placeholder="P-00..."
                                 className={`w-full pl-9 pr-8 py-3 rounded-lg border outline-none transition-all font-bold text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
                             />
                             {productId && (
@@ -337,7 +358,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                     </div>
 
                     {/* Dropdown List */}
-                    {isDropdownOpen && partCodeInput.length > 0 && !foundProduct && (
+                    {isDropdownOpen && deferredPartCodeInput.length > 0 && (
                         <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg max-h-60 overflow-y-auto right-0 min-w-[250px]">
                         {filteredProducts.length === 0 ? (
                             <div className="p-3 text-sm text-slate-500 dark:text-slate-400 text-center">Sonuç yok.</div>
@@ -372,9 +393,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             {foundProduct && (
                 <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 text-sm rounded-lg flex items-center gap-2 border border-green-200 dark:border-green-800 animate-fade-in">
                     <CheckCircle size={18} className="flex-shrink-0" />
-                    <div>
-                        <div className="font-bold">{foundProduct.product_name}</div>
-                        <div className="text-xs opacity-80 flex gap-2">
+                    <div className="flex-1">
+                        <div className="flex justify-between items-center">
+                            <div className="font-bold">{foundProduct.product_name}</div>
+                            <span className="text-xs font-mono bg-white dark:bg-slate-700 px-1.5 py-0.5 rounded border border-green-200 dark:border-green-700">
+                                {foundProduct.part_code}
+                            </span>
+                        </div>
+                        <div className="text-xs opacity-80 flex gap-2 mt-0.5">
                             <span>Stok: {foundProduct.current_stock} {foundProduct.unit}</span>
                             <span>|</span>
                             <span>Reyon: {foundProduct.location}</span>
