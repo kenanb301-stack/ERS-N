@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Search, ChevronDown, AlertTriangle, Lock, RefreshCw, Trash2, ScanLine, Hash } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Search, AlertTriangle, RefreshCw, Trash2, ScanLine, Hash } from 'lucide-react';
 import { Product, Transaction, TransactionType } from '../types';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -22,17 +22,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   
-  // Barcode specific state
-  const [scannedBarcode, setScannedBarcode] = useState('');
-  const [scanFeedback, setScanFeedback] = useState(''); // Feedback message for swap
+  const [scanFeedback, setScanFeedback] = useState(''); 
   const [showScanner, setShowScanner] = useState(false);
 
-  // Searchable Dropdown States
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Handle external default barcode (from Global Scan)
   useEffect(() => {
     if (isOpen && defaultBarcode) {
         handleBarcodeSearch(defaultBarcode);
@@ -42,7 +38,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   useEffect(() => {
     if (isOpen) {
       if (transactionToEdit) {
-        // Edit Mode
         setType(transactionToEdit.type);
         setProductId(transactionToEdit.product_id);
         setQuantity(transactionToEdit.quantity);
@@ -53,10 +48,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         
         setError('');
         setIsDropdownOpen(false);
-        setScannedBarcode('');
         setScanFeedback('');
       } else {
-        // Create Mode
         setType(initialType);
         if (!defaultBarcode) {
             setProductId('');
@@ -65,14 +58,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             setError('');
             setSearchTerm('');
             setIsDropdownOpen(false);
-            setScannedBarcode('');
             setScanFeedback('');
         }
       }
     }
   }, [isOpen, initialType, transactionToEdit, products]);
 
-  // Click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -92,7 +83,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     (p.part_code && p.part_code.toLowerCase().includes(searchTerm.toLowerCase())) ||
     p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (p.barcode && p.barcode.includes(searchTerm)) ||
-    (p.id && p.id === searchTerm) ||
     (p.short_id && String(p.short_id).includes(searchTerm)) ||
     (p.location && p.location.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -100,49 +90,47 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const handleProductSelect = (product: Product) => {
     setProductId(product.id);
     setSearchTerm(product.part_code || product.product_name);
-    setScannedBarcode(product.barcode || '');
     setIsDropdownOpen(false);
     setError('');
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    
-    // Manual typing clears feedback
-    setScanFeedback('');
+    setScanFeedback(''); // Clear feedback on type
 
+    // 1. Reset selection if user is typing
     if (productId) {
         setProductId('');
         setQuantity('');
     }
     
-    // SHADOW SEARCH: Check exact Short ID match while typing
+    // 2. REAL-TIME INTERCEPTOR (Shadow Search)
+    // Check if the typed value matches a Short ID exactly
     if (val.trim().length > 0) {
         const searchVal = val.trim();
         const productByShortId = products.find(p => String(p.short_id || '').trim() === searchVal);
         
         if (productByShortId) {
+            // MATCH FOUND BY SHORT ID!
+            // Instead of showing the short ID numbers, immediately swap to Part Code
             handleProductSelect(productByShortId);
             setQuantity(1);
-            setSearchTerm(productByShortId.part_code || productByShortId.product_name);
-            setScanFeedback(`Barkod Okundu: ${searchVal} ➔ ${productByShortId.part_code}`);
+            setScanFeedback(`✅ Barkod Okundu: ${productByShortId.part_code}`);
             
+            // Focus quantity input
             setTimeout(() => document.getElementById('quantityInput')?.focus(), 50);
             return;
         }
     }
 
+    // Normal typing
     setSearchTerm(val);
     setIsDropdownOpen(true);
   };
 
   const handleBarcodeSearch = (code: string) => {
-      setScannedBarcode(code);
       const searchCode = code.trim();
       
-      // Priority 1: Short ID
-      // Priority 2: Standard Barcode
-      // Priority 3: Part Code
       const product = products.find(p => 
           (String(p.short_id || '').trim() === searchCode) || 
           (p.barcode === searchCode) || 
@@ -153,21 +141,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       if (product) {
           handleProductSelect(product);
           setQuantity(1);
-          
-          // Visual Feedback for Swap
-          if (String(product.short_id) === searchCode) {
-              setScanFeedback(`✅ Barkod Okundu: ${searchCode} ➔ ${product.part_code}`);
-          } else if (product.location === searchCode) {
-              setScanFeedback(`✅ Reyon Okundu: ${searchCode} ➔ ${product.part_code}`);
-          } else {
-              setScanFeedback(`✅ Ürün Bulundu: ${product.part_code}`);
-          }
-
+          setScanFeedback(`✅ Barkod Algılandı: ${product.part_code}`);
           setTimeout(() => document.getElementById('quantityInput')?.focus(), 100);
       } else {
           setError(`"${code}" kodlu ürün bulunamadı.`);
           setProductId('');
-          setSearchTerm(code);
+          setSearchTerm(code); // Show raw code if not found so user sees what was scanned
           setQuantity('');
           setScanFeedback('');
       }
@@ -180,7 +159,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!productId) {
       setError('Lütfen listeden geçerli bir parça kodu seçin.');
       return;
@@ -189,7 +167,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       setError('Geçerli bir miktar girin.');
       return;
     }
-    
     onSubmit({
       id: transactionToEdit?.id,
       productId,
@@ -209,6 +186,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     )}
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] transition-colors">
+        
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700">
           <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
@@ -226,7 +204,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-4 overflow-y-visible">
           {error && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm rounded-lg flex items-center gap-2">
@@ -236,7 +213,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
           )}
 
           <form id="transactionForm" onSubmit={handleSubmit} className="space-y-4">
-            {/* Type Switcher */}
             <div className="flex p-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
               <button
                 type="button"
@@ -254,52 +230,35 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               </button>
             </div>
 
-            {/* Barcode Fast Scan Input */}
-            {!transactionToEdit && (
-                <div className="flex gap-2 mb-2">
-                    <input 
-                        type="text"
-                        placeholder="Barkod okut..."
-                        value={scannedBarcode}
-                        onChange={(e) => setScannedBarcode(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleBarcodeSearch(scannedBarcode);
-                            }
-                        }}
-                        className="flex-1 p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg focus:border-blue-500 outline-none dark:bg-slate-700 dark:text-white"
-                        autoFocus={!defaultBarcode}
-                    />
-                    <button 
-                        type="button" 
-                        onClick={() => setShowScanner(true)}
-                        className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 transition-transform"
-                    >
-                        <ScanLine size={20} />
-                    </button>
-                </div>
-            )}
-
-            {/* Searchable Product Input (PARÇA KODU ODAKLI) */}
+            {/* PRODUCT INPUT */}
             <div className="relative" ref={dropdownRef}>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Parça Kodu</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input
-                type="text"
-                value={searchTerm}
-                onChange={handleSearchChange}
-                onFocus={() => setIsDropdownOpen(true)}
-                placeholder="Parça kodunu yazın..."
-                className={`w-full pl-10 pr-10 py-3 rounded-lg border outline-none transition-all font-mono font-bold text-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
-                />
-                {productId && (
-                    <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 dark:text-green-400" size={18} />
-                )}
-                {!productId && (
-                    <Hash className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
-                )}
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Parça Kodu / Barkod</label>
+              <div className="relative flex gap-2">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={handleSearchChange}
+                        onFocus={() => setIsDropdownOpen(true)}
+                        placeholder="Barkod okut veya parça kodu yaz..."
+                        autoFocus={!defaultBarcode && !transactionToEdit}
+                        className={`w-full pl-10 pr-10 py-3 rounded-lg border outline-none transition-all font-mono font-bold text-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
+                    />
+                    {productId && (
+                        <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 dark:text-green-400" size={18} />
+                    )}
+                    {!productId && (
+                        <Hash className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                    )}
+                </div>
+                <button 
+                    type="button" 
+                    onClick={() => setShowScanner(true)}
+                    className="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 transition-transform"
+                >
+                    <ScanLine size={20} />
+                </button>
               </div>
               
               {/* Scan Feedback Message */}
@@ -390,7 +349,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
           </form>
         </div>
 
-        {/* Footer */}
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 mt-auto flex gap-3">
           {transactionToEdit && (
             <button

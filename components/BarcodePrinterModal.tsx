@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { X, Printer, CheckSquare, Square, Search, Filter, Check, Settings2, ShieldCheck } from 'lucide-react';
+import { X, Printer, CheckSquare, Square, Search, Filter, Check, ShieldCheck } from 'lucide-react';
 import { Product } from '../types';
 import JsBarcode from 'jsbarcode';
 
@@ -16,13 +16,8 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
   const [isGenerating, setIsGenerating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Settings
-  const [barcodeWidth, setBarcodeWidth] = useState<number>(2); // 1 = Narrow, 2 = Standard
-
-  // Products that are valid candidates for printing
   const validProducts = products;
 
-  // Filtered products based on search
   const filteredProducts = validProducts.filter(p => 
     searchTerm === '' || 
     p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -32,33 +27,22 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
 
   useEffect(() => {
     if (isOpen) {
-      // Reset selection and search when opening
       setSelectedProductIds(new Set());
       setSearchTerm('');
-      setBarcodeWidth(2);
-      
       regenerateBarcodes();
     }
   }, [isOpen, products]);
-
-  // Regenerate when settings change
-  useEffect(() => {
-    if (isOpen) {
-        regenerateBarcodes();
-    }
-  }, [barcodeWidth]);
 
   const regenerateBarcodes = () => {
     setIsGenerating(true);
       
     const timer = setTimeout(() => {
         const newImages: Record<string, string> = {};
-        const canvas = document.createElement('canvas'); // Off-screen canvas
+        const canvas = document.createElement('canvas'); 
         
         validProducts.forEach(product => {
             try {
-                // ALWAYS USE SHORT_ID for the Barcode Bars
-                // If missing (shouldn't happen due to migration), generate temp
+                // FORCE USE SHORT_ID for the barcode bars (Compact & Reliable)
                 const codeToUse = product.short_id || Math.floor(100000 + Math.random() * 900000).toString();
 
                 if (codeToUse) {
@@ -66,11 +50,11 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                     ctx?.clearRect(0,0, canvas.width, canvas.height);
 
                     JsBarcode(canvas, codeToUse, {
-                        format: "CODE128", // Automatic compact mode
+                        format: "CODE128", 
                         lineColor: "#000",
-                        width: barcodeWidth,
+                        width: 2,
                         height: 50,
-                        displayValue: true, // Show the short ID numbers below bars
+                        displayValue: true, 
                         fontSize: 14,
                         textMargin: 2,
                         margin: 10,
@@ -79,7 +63,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                     newImages[product.id] = canvas.toDataURL("image/png");
                 }
             } catch (e) {
-                console.warn(`Barcode generation skipped for ${product.product_name}:`, e);
+                console.warn(`Barcode error ${product.product_name}:`, e);
             }
         });
         
@@ -120,7 +104,6 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
 
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-      {/* Yazıcı Stilleri */}
       <style>{`
         @media print {
             @page {
@@ -185,51 +168,20 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
           <div>
               <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
                 <Printer size={24} className="text-blue-600 dark:text-blue-400" />
-                Barkod Yazdır (Süper Kısa Mod)
+                Barkod Yazdır
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Etiket: 56mm x 40mm | Veri: 6 Haneli ID</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Etiket: 56mm x 40mm | Kaynak: Süper Kısa Kod</p>
           </div>
           <button onClick={onClose} className="p-2 bg-white dark:bg-slate-700 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors shadow-sm">
             <X size={20} />
           </button>
         </div>
 
-        {/* Configuration Bar */}
-        <div className="p-3 bg-blue-50 dark:bg-blue-900/10 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row gap-4 items-center justify-between text-sm">
-             <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto">
-                 <div className="flex items-center gap-2 whitespace-nowrap">
-                     <Settings2 size={16} className="text-blue-600 dark:text-blue-400" />
-                     <span className="font-bold text-slate-700 dark:text-slate-300">Ayarlar:</span>
-                 </div>
-                 
-                 {/* Sabit Bilgi */}
-                 <div className="flex items-center gap-2 bg-white dark:bg-slate-700 px-3 py-1 rounded border border-slate-200 dark:border-slate-600">
-                     <span className="text-slate-500 dark:text-slate-400 text-xs">Barkod Tipi:</span>
-                     <span className="font-bold text-slate-800 dark:text-white text-xs">Süper Kısa (6 Hane)</span>
-                 </div>
-
-                 <div className="flex items-center gap-2">
-                     <span className="text-slate-600 dark:text-slate-400">Çizgi Genişliği:</span>
-                     <div className="flex bg-white dark:bg-slate-700 rounded border border-slate-300 dark:border-slate-600 p-0.5">
-                        <button 
-                            onClick={() => setBarcodeWidth(1.5)}
-                            className={`px-2 py-0.5 text-xs rounded transition-colors ${barcodeWidth === 1.5 ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500'}`}
-                        >
-                            Dar
-                        </button>
-                        <button 
-                            onClick={() => setBarcodeWidth(2)}
-                            className={`px-2 py-0.5 text-xs rounded transition-colors ${barcodeWidth === 2 ? 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white' : 'text-slate-500'}`}
-                        >
-                            Orta
-                        </button>
-                     </div>
-                 </div>
-             </div>
-             
-             <div className="hidden lg:flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
-                 <ShieldCheck size={14}/> 
-                 Otomatik Dönüşüm Aktif: Okutunca Parça Kodu yazar.
+        {/* Info Bar */}
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-900/10 border-b border-emerald-100 dark:border-emerald-800 flex items-center justify-between text-sm">
+             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                 <ShieldCheck size={16} /> 
+                 <span>Otomatik Dönüşüm: Barkod okutulduğunda sistem otomatik olarak Parça Kodunu bulur.</span>
              </div>
         </div>
 
