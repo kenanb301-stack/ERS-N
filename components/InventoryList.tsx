@@ -23,13 +23,14 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
       const term = searchTerm.toLowerCase();
+      // Expanded search logic to include secure String conversion for numeric fields like short_id
       const matchesSearch = product.product_name.toLowerCase().includes(term) || 
                             (product.part_code && product.part_code.toLowerCase().includes(term)) ||
                             (product.location && product.location.toLowerCase().includes(term)) ||
                             (product.material && product.material.toLowerCase().includes(term)) ||
                             (product.barcode && product.barcode.includes(term)) ||
                             (product.id && product.id.toLowerCase() === term) ||
-                            (product.short_id && String(product.short_id) === term); // Short ID search with string conversion
+                            (product.short_id && String(product.short_id).includes(term)); // Robust Short ID search
       return matchesSearch;
     });
   }, [products, searchTerm]);

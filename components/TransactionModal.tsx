@@ -107,6 +107,37 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     setError('');
   };
 
+  // --- SHADOW SEARCH IMPLEMENTATION ---
+  // Arama kutusuna her basılan tuşu dinler
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchTerm(val);
+    
+    // Eğer kullanıcı manuel bir şey yazıyorsa, mevcut seçimi kaldır
+    if (productId) {
+        setProductId('');
+        setQuantity('');
+    }
+    
+    setIsDropdownOpen(true);
+
+    // GÖLGE ARAMA: Yazılan değer bir Kısa Kod (Short ID) ile tam eşleşiyor mu?
+    if (val.trim().length > 0) {
+        // String dönüşümü ile güvenli karşılaştırma (Sayı/Metin fark etmez)
+        const productByShortId = products.find(p => String(p.short_id).trim() === val.trim());
+        
+        if (productByShortId) {
+            // Eşleşme bulundu!
+            // 1. Ürünü seç
+            handleProductSelect(productByShortId);
+            // 2. Miktarı 1 yap (Hız için)
+            setQuantity(1);
+            // 3. Miktar kutusuna odaklan (Opsiyonel, akışa göre)
+            setTimeout(() => document.getElementById('quantityInput')?.focus(), 50);
+        }
+    }
+  };
+
   const handleBarcodeSearch = (code: string) => {
       setScannedBarcode(code);
       // Normalize code
@@ -116,13 +147,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       // 1. Barcode field
       // 2. Part Code
       // 3. System ID
-      // 4. Short ID (6 Digit) - Fixed Type Mismatch
+      // 4. Short ID (6 Digit) - String Convert for Robustness
       // 5. LOCATION (Reyon)
       const product = products.find(p => 
           (p.barcode === searchCode) || 
           (p.part_code === searchCode) || 
           (p.id === searchCode) ||
-          (p.short_id && String(p.short_id).trim() === searchCode) || 
+          (String(p.short_id).trim() === searchCode) || 
           (p.location === searchCode)
       );
       
@@ -259,11 +290,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setProductId(''); 
-                    setIsDropdownOpen(true);
-                }}
+                onChange={handleSearchChange}
                 onFocus={() => setIsDropdownOpen(true)}
                 placeholder="Parça kodunu yazın..."
                 className={`w-full pl-10 pr-10 py-3 rounded-lg border outline-none transition-all font-mono font-bold text-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
