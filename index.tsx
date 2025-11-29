@@ -13,11 +13,13 @@ interface ErrorBoundaryState {
 
 // Hata Sınırı Bileşeni (React Error Boundary)
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Use class property to initialize state
-  state: ErrorBoundaryState = {
-    hasError: false,
-    error: null
-  };
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null
+    };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };

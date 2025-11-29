@@ -107,11 +107,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     setError('');
   };
 
-  // --- SHADOW SEARCH IMPLEMENTATION ---
+  // --- SHADOW SEARCH & SWAP LOGIC ---
   // Arama kutusuna her basılan tuşu dinler
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    setSearchTerm(val);
     
     // Eğer kullanıcı manuel bir şey yazıyorsa, mevcut seçimi kaldır
     if (productId) {
@@ -119,12 +118,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         setQuantity('');
     }
     
-    setIsDropdownOpen(true);
-
     // GÖLGE ARAMA: Yazılan değer bir Kısa Kod (Short ID) ile tam eşleşiyor mu?
     if (val.trim().length > 0) {
         // String dönüşümü ile güvenli karşılaştırma (Sayı/Metin fark etmez)
-        const productByShortId = products.find(p => String(p.short_id).trim() === val.trim());
+        // Burada trim() yaparak boşlukları temizliyoruz
+        const searchVal = val.trim();
+        const productByShortId = products.find(p => String(p.short_id || '').trim() === searchVal);
         
         if (productByShortId) {
             // Eşleşme bulundu!
@@ -132,10 +131,18 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             handleProductSelect(productByShortId);
             // 2. Miktarı 1 yap (Hız için)
             setQuantity(1);
-            // 3. Miktar kutusuna odaklan (Opsiyonel, akışa göre)
+            // 3. Ekranda yazan kısa kodu (123456) sil ve Parça Kodunu (P-003) yaz
+            setSearchTerm(productByShortId.part_code || productByShortId.product_name);
+            
+            // 4. Miktar kutusuna odaklan (Opsiyonel, akışa göre)
             setTimeout(() => document.getElementById('quantityInput')?.focus(), 50);
+            return; // Search term'i product select içinde set ettik, burada tekrar etmeye gerek yok
         }
     }
+
+    // Eşleşme yoksa yazılanı göster
+    setSearchTerm(val);
+    setIsDropdownOpen(true);
   };
 
   const handleBarcodeSearch = (code: string) => {
@@ -144,21 +151,21 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       const searchCode = code.trim();
       
       // Find product by:
-      // 1. Barcode field
-      // 2. Part Code
-      // 3. System ID
-      // 4. Short ID (6 Digit) - String Convert for Robustness
+      // 1. Short ID (6 Digit) - PRIMARY CHECK & STRING CONVERSION
+      // 2. Barcode field
+      // 3. Part Code
+      // 4. System ID
       // 5. LOCATION (Reyon)
       const product = products.find(p => 
+          (String(p.short_id || '').trim() === searchCode) || 
           (p.barcode === searchCode) || 
           (p.part_code === searchCode) || 
           (p.id === searchCode) ||
-          (String(p.short_id).trim() === searchCode) || 
           (p.location === searchCode)
       );
       
       if (product) {
-          handleProductSelect(product);
+          handleProductSelect(product); // This sets the searchTerm to Part Code automatically
           // AUTO SET QUANTITY TO 1 FOR FASTER WORKFLOW
           setQuantity(1);
           // Optional: Focus quantity field here if needed
