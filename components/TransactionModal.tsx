@@ -25,7 +25,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const [foundProduct, setFoundProduct] = useState<Product | null>(null);
   const [showScanner, setShowScanner] = useState(false);
 
-  // --- NEW: DUAL FIELDS STATE ---
+  // --- DUAL FIELDS STATE ---
   const [barcodeInput, setBarcodeInput] = useState('');
   const [partCodeInput, setPartCodeInput] = useState('');
   
@@ -45,6 +45,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
       const handleKeyDown = (e: KeyboardEvent) => {
           const activeId = document.activeElement?.id;
+          // Eğer miktar veya açıklama alanındaysa barkod dinlemeyi durdurma, 
+          // ama enter'a basınca işlem yapmasını engelle.
           if (activeId === 'quantityInput' || activeId === 'descInput') {
               return;
           }
@@ -63,11 +65,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               if (isScannerInput) {
                   barcodeBuffer.current += e.key;
               } else {
-                  // Buffer reset logic can be relaxed or strict
+                  // Buffer reset logic
                   if (now - lastKeyTime.current > 100) {
                       barcodeBuffer.current = ''; 
                   }
-                  // Allow manual typing if not scanner speed
                   barcodeBuffer.current += e.key;
               }
           }
@@ -93,10 +94,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         
         const product = products.find(p => p.id === transactionToEdit.product_id);
         if (product) {
-            setProductId(product.id);
-            setFoundProduct(product);
-            setPartCodeInput(product.part_code || product.product_name || '');
-            setBarcodeInput(product.short_id ? String(product.short_id) : (product.barcode || ''));
+            // Edit modunda alanları doldur ama selectProduct çağırarak senkronize et
+            selectProduct(product);
         }
         
         setError('');
@@ -133,20 +132,17 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
   const processScannedCode = (code: string) => {
       const cleanCode = code.trim();
-      setBarcodeInput(cleanCode); // Barkod alanına yaz
       
       // Ürünü bul
       let product = products.find(p => String(p.short_id).trim() === cleanCode);
       if (!product) product = products.find(p => p.barcode === cleanCode);
       if (!product) product = products.find(p => p.part_code === cleanCode);
       
-      // Reyon kodunu da kontrol et (opsiyonel)
-      if (!product) product = products.find(p => p.location === cleanCode);
-
       if (product) {
           selectProduct(product);
       } else {
-          // Bulunamadıysa sadece barkod alanı dolu kalsın, diğerlerini temizle
+          // Bulunamadıysa barkod alanına yaz ama diğerlerini temizle
+          setBarcodeInput(cleanCode);
           setProductId('');
           setFoundProduct(null);
           setPartCodeInput('');
@@ -154,49 +150,60 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       }
   };
 
+  // MERKEZİ ÜRÜN SEÇME FONKSİYONU
+  // Bu fonksiyon her iki alanı da (Barkod ve Parça Kodu) zorla senkronize eder.
   const selectProduct = (product: Product) => {
     setProductId(product.id);
     setFoundProduct(product);
     
-    // Fill Fields
+    // 1. Parça Kodunu Doldur
     setPartCodeInput(product.part_code || product.product_name);
-    // Barkod alanını sadece boşsa doldur, kullanıcı zaten doğru barkodu girdiyse değiştirmene gerek yok
-    // Ancak ürün dropdown'dan seçildiyse doldur.
-    setBarcodeInput(product.short_id ? String(product.short_id) : (product.barcode || ''));
+    
+    // 2. Barkod Kodunu Doldur
+    const code = product.short_id ? String(product.short_id) : (product.barcode || '');
+    setBarcodeInput(code);
     
     setIsDropdownOpen(false);
     setError('');
     
-    // Focus quantity
+    // Miktar alanına odaklan
     setTimeout(() => {
-        document.getElementById('quantityInput')?.focus();
-        (document.getElementById('quantityInput') as HTMLInputElement)?.select();
+        const qtyInput = document.getElementById('quantityInput') as HTMLInputElement;
+        if (qtyInput) {
+            qtyInput.focus();
+            qtyInput.select();
+        }
     }, 100);
   };
 
-  // Barkod Elle Girilirse
+  // Barkod Elle Girilirse (OnChange)
   const handleBarcodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
-      setBarcodeInput(val);
+      setBarcodeInput(val); // UI'yı hemen güncelle
 
       const cleanVal = val.trim();
 
       if (cleanVal.length > 0) {
+          // Anlık Arama
           const product = products.find(p => String(p.short_id).trim() === cleanVal);
           
           if (product) {
+              // Eşleşme varsa diğer alanları doldur
               setProductId(product.id);
               setFoundProduct(product);
               setPartCodeInput(product.part_code || product.product_name || '');
               setError('');
           } else {
-              // Eşleşme bozulursa seçimi kaldır ama yazmaya izin ver
+              // Eşleşme yoksa/bozulursa diğer alanları temizle (kullanıcının yanlış barkod girdiğini anlaması için)
               setProductId('');
               setFoundProduct(null);
               setPartCodeInput(''); 
           }
       } else {
-          resetForm();
+          // Alan boşaltılırsa her şeyi sıfırla
+          setProductId('');
+          setFoundProduct(null);
+          setPartCodeInput('');
       }
   };
 
@@ -206,12 +213,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       setPartCodeInput(val);
       setIsDropdownOpen(true);
 
-      // Tam eşleşme kontrolü (Opsiyonel: Kullanıcı tam kodu yazarsa otomatik barkodu getir)
+      // Tam eşleşme kontrolü (Kullanıcı listeden seçmeden tam kodu yazarsa)
       const exactMatch = products.find(p => (p.part_code || '').toLowerCase() === val.trim().toLowerCase());
       if (exactMatch) {
-          setProductId(exactMatch.id);
-          setFoundProduct(exactMatch);
-          setBarcodeInput(exactMatch.short_id ? String(exactMatch.short_id) : '');
+          selectProduct(exactMatch);
       } else {
           if (productId) {
               setProductId('');
@@ -250,7 +255,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const selectedProduct = products.find(p => p.id === productId);
   const willBeNegative = !transactionToEdit && type === TransactionType.OUT && selectedProduct && quantity && (selectedProduct.current_stock - Number(quantity) < 0);
 
-  // Filter products based on Part Code Input for Dropdown
+  // Dropdown Filtreleme
   const filteredProducts = products.filter(p => 
     (p.part_code && p.part_code.toLowerCase().includes(deferredPartCodeInput.toLowerCase())) ||
     p.product_name.toLowerCase().includes(deferredPartCodeInput.toLowerCase()) || 
@@ -321,6 +326,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input
                             type="text"
+                            inputMode="numeric" // Mobil klavye için sayısal mod
                             value={barcodeInput}
                             onChange={handleBarcodeInput}
                             placeholder="123456"
@@ -415,6 +421,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 <input
                   id="quantityInput"
                   type="number"
+                  inputMode="decimal" // Mobil klavye için
                   value={quantity}
                   onChange={(e) => setQuantity(Number(e.target.value))}
                   placeholder="0"
