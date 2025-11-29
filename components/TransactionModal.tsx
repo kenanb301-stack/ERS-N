@@ -24,6 +24,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   
   // Barcode specific state
   const [scannedBarcode, setScannedBarcode] = useState('');
+  const [scanFeedback, setScanFeedback] = useState(''); // Feedback message for swap
   const [showScanner, setShowScanner] = useState(false);
 
   // Searchable Dropdown States
@@ -47,17 +48,16 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         setQuantity(transactionToEdit.quantity);
         setDescription(transactionToEdit.description);
         
-        // Parça kodunu bulup arama kutusuna onu yazıyoruz
         const product = products.find(p => p.id === transactionToEdit.product_id);
         setSearchTerm(product?.part_code || product?.product_name || '');
         
         setError('');
         setIsDropdownOpen(false);
         setScannedBarcode('');
+        setScanFeedback('');
       } else {
         // Create Mode
         setType(initialType);
-        // Only reset if no default barcode is provided (handled by other effect)
         if (!defaultBarcode) {
             setProductId('');
             setQuantity('');
@@ -66,6 +66,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             setSearchTerm('');
             setIsDropdownOpen(false);
             setScannedBarcode('');
+            setScanFeedback('');
         }
       }
     }
@@ -85,8 +86,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   if (!isOpen) return null;
 
   const selectedProduct = products.find(p => p.id === productId);
-
-  // Calculate potential negative stock logic
   const willBeNegative = !transactionToEdit && type === TransactionType.OUT && selectedProduct && quantity && (selectedProduct.current_stock - Number(quantity) < 0);
 
   const filteredProducts = products.filter(p => 
@@ -94,88 +93,83 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     (p.barcode && p.barcode.includes(searchTerm)) ||
     (p.id && p.id === searchTerm) ||
-    (p.short_id && String(p.short_id).includes(searchTerm)) || // Allow typing partial short ID
-    (p.location && p.location.toLowerCase().includes(searchTerm.toLowerCase())) // Allow finding by typing location
+    (p.short_id && String(p.short_id).includes(searchTerm)) ||
+    (p.location && p.location.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleProductSelect = (product: Product) => {
     setProductId(product.id);
-    // Input'a Parça Kodunu yazıyoruz (Kullanıcı Reyon barkodu veya Kısa Kod okutsa bile buraya Parça Kodu gelir)
     setSearchTerm(product.part_code || product.product_name);
     setScannedBarcode(product.barcode || '');
     setIsDropdownOpen(false);
     setError('');
   };
 
-  // --- SHADOW SEARCH & SWAP LOGIC ---
-  // Arama kutusuna her basılan tuşu dinler
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     
-    // Eğer kullanıcı manuel bir şey yazıyorsa, mevcut seçimi kaldır
+    // Manual typing clears feedback
+    setScanFeedback('');
+
     if (productId) {
         setProductId('');
         setQuantity('');
     }
     
-    // GÖLGE ARAMA: Yazılan değer bir Kısa Kod (Short ID) ile tam eşleşiyor mu?
+    // SHADOW SEARCH: Check exact Short ID match while typing
     if (val.trim().length > 0) {
-        // String dönüşümü ile güvenli karşılaştırma (Sayı/Metin fark etmez)
-        // Burada trim() yaparak boşlukları temizliyoruz
         const searchVal = val.trim();
         const productByShortId = products.find(p => String(p.short_id || '').trim() === searchVal);
         
         if (productByShortId) {
-            // Eşleşme bulundu!
-            // 1. Ürünü seç
             handleProductSelect(productByShortId);
-            // 2. Miktarı 1 yap (Hız için)
             setQuantity(1);
-            // 3. Ekranda yazan kısa kodu (123456) sil ve Parça Kodunu (P-003) yaz
             setSearchTerm(productByShortId.part_code || productByShortId.product_name);
+            setScanFeedback(`Barkod Okundu: ${searchVal} ➔ ${productByShortId.part_code}`);
             
-            // 4. Miktar kutusuna odaklan (Opsiyonel, akışa göre)
             setTimeout(() => document.getElementById('quantityInput')?.focus(), 50);
-            return; // Search term'i product select içinde set ettik, burada tekrar etmeye gerek yok
+            return;
         }
     }
 
-    // Eşleşme yoksa yazılanı göster
     setSearchTerm(val);
     setIsDropdownOpen(true);
   };
 
   const handleBarcodeSearch = (code: string) => {
       setScannedBarcode(code);
-      // Normalize code
       const searchCode = code.trim();
       
-      // Find product by:
-      // 1. Short ID (6 Digit) - PRIMARY CHECK & STRING CONVERSION
-      // 2. Barcode field
-      // 3. Part Code
-      // 4. System ID
-      // 5. LOCATION (Reyon)
+      // Priority 1: Short ID
+      // Priority 2: Standard Barcode
+      // Priority 3: Part Code
       const product = products.find(p => 
           (String(p.short_id || '').trim() === searchCode) || 
           (p.barcode === searchCode) || 
           (p.part_code === searchCode) || 
-          (p.id === searchCode) ||
           (p.location === searchCode)
       );
       
       if (product) {
-          handleProductSelect(product); // This sets the searchTerm to Part Code automatically
-          // AUTO SET QUANTITY TO 1 FOR FASTER WORKFLOW
+          handleProductSelect(product);
           setQuantity(1);
-          // Optional: Focus quantity field here if needed
+          
+          // Visual Feedback for Swap
+          if (String(product.short_id) === searchCode) {
+              setScanFeedback(`✅ Barkod Okundu: ${searchCode} ➔ ${product.part_code}`);
+          } else if (product.location === searchCode) {
+              setScanFeedback(`✅ Reyon Okundu: ${searchCode} ➔ ${product.part_code}`);
+          } else {
+              setScanFeedback(`✅ Ürün Bulundu: ${product.part_code}`);
+          }
+
           setTimeout(() => document.getElementById('quantityInput')?.focus(), 100);
       } else {
           setError(`"${code}" kodlu ürün bulunamadı.`);
-          // Eğer bulunamazsa arama kutusuna okunan kodu yaz ki kullanıcı görsün
           setProductId('');
           setSearchTerm(code);
           setQuantity('');
+          setScanFeedback('');
       }
   };
 
@@ -260,16 +254,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               </button>
             </div>
 
-            {/* Barcode Fast Scan Input (Shown only if not coming from defaultBarcode) */}
+            {/* Barcode Fast Scan Input */}
             {!transactionToEdit && (
                 <div className="flex gap-2 mb-2">
                     <input 
                         type="text"
                         placeholder="Barkod okut..."
                         value={scannedBarcode}
-                        onChange={(e) => {
-                            setScannedBarcode(e.target.value);
-                        }}
+                        onChange={(e) => setScannedBarcode(e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                                 e.preventDefault();
@@ -309,6 +301,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                     <Hash className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                 )}
               </div>
+              
+              {/* Scan Feedback Message */}
+              {scanFeedback && (
+                  <div className="mt-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 animate-fade-in flex items-center gap-1">
+                      {scanFeedback}
+                  </div>
+              )}
 
               {/* Dropdown List */}
               {isDropdownOpen && (
@@ -325,17 +324,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                       >
                         <div className="flex items-center gap-3">
                              <div className="flex flex-col">
-                                {/* Parça Kodu ÖNCELİKLİ */}
                                 <span className="font-bold font-mono text-slate-800 dark:text-white text-lg group-hover:text-primary dark:group-hover:text-blue-400">
                                     {p.part_code || 'KODSUZ'}
                                 </span>
-                                {/* Ürün adı sadece bilgi amaçlı küçük */}
                                 <span className="text-xs text-slate-400 dark:text-slate-500">
                                     {p.product_name}
                                 </span>
                              </div>
                         </div>
-                        
                         <div className="text-right">
                              <div className={`text-xs font-bold px-2 py-1 rounded ${p.current_stock <= p.min_stock_level ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
                                 {p.current_stock} {p.unit}
@@ -370,7 +366,6 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                     </span>
                 )}
               </div>
-              {/* Negative Stock Warning */}
               {willBeNegative && selectedProduct && (
                   <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-400 text-xs rounded flex items-start gap-2">
                       <AlertTriangle size={14} className="mt-0.5 min-w-[14px]" />
