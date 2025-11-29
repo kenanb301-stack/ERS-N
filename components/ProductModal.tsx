@@ -1,9 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
-import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, ScanLine, MapPin, Hexagon, Hash } from 'lucide-react';
+import { X, PackagePlus, AlertCircle, Save, Lock, Trash2, MapPin, Hexagon, Hash } from 'lucide-react';
 import { UNITS, MATERIALS } from '../constants';
 import { Product } from '../types';
-import BarcodeScanner from './BarcodeScanner';
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -21,9 +19,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
   const [unit, setUnit] = useState(UNITS[0]);
   const [minStock, setMinStock] = useState<number>(10);
   const [initialStock, setInitialStock] = useState<number>(0);
-  const [barcode, setBarcode] = useState('');
   const [error, setError] = useState('');
-  const [showScanner, setShowScanner] = useState(false);
   
   // Form alanlarını duruma göre doldur veya sıfırla
   useEffect(() => {
@@ -37,7 +33,6 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
         setUnit(productToEdit.unit);
         setMinStock(productToEdit.min_stock_level);
         setInitialStock(productToEdit.current_stock);
-        setBarcode(productToEdit.barcode || '');
       } else {
         // Yeni Ekleme Modu
         setName('');
@@ -47,10 +42,8 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
         setUnit(UNITS[0]);
         setMinStock(10);
         setInitialStock(0);
-        setBarcode('');
       }
       setError('');
-      setShowScanner(false);
     }
   }, [isOpen, productToEdit]);
 
@@ -71,26 +64,14 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
       unit,
       min_stock_level: Number(minStock),
       current_stock: Number(initialStock),
-      barcode: barcode.trim() || partCode.trim(), // Barkod girilmezse parça kodu kullanılır
     };
 
     onSubmit(formData);
     onClose();
   };
 
-  const handleScanSuccess = (decodedText: string) => {
-      setBarcode(decodedText);
-      setShowScanner(false);
-  };
-
   return (
     <>
-    {showScanner && (
-        <BarcodeScanner 
-            onScanSuccess={handleScanSuccess} 
-            onClose={() => setShowScanner(false)} 
-        />
-    )}
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] transition-colors">
         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
@@ -226,35 +207,10 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSubmit, 
               </div>
             </div>
 
-            {/* Barkod Alanı */}
-            <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-700">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Barkod Verisi</label>
-                  <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={barcode}
-                        onChange={(e) => setBarcode(e.target.value)}
-                        placeholder="Otomatik (Parça kodu) veya Tara"
-                        className="flex-1 p-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
-                      />
-                      <button 
-                        type="button"
-                        onClick={() => setShowScanner(true)}
-                        className="p-3 bg-slate-100 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-500 transition-colors"
-                        title="Kamerayı Aç"
-                      >
-                          <ScanLine size={24} />
-                      </button>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">Boş bırakılırsa otomatik olarak Parça Kodu kullanılır.</p>
-                </div>
-            </div>
-
           </form>
         </div>
 
-        <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 mt-6 flex gap-3">
+        <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 mt-auto flex gap-3">
              {productToEdit && onDelete && (
                 <button
                     type="button"

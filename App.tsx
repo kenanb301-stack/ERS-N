@@ -114,36 +114,66 @@ function App() {
     }
   }, [currentUser]);
 
-  // --- MIGRATION EFFECT: Generate Short IDs for old products ---
-  useEffect(() => {
-      if (products.length === 0) return;
-
-      const productsMissingShortId = products.some(p => !p.short_id);
-      
-      if (productsMissingShortId) {
-          console.log("Onarım: Eksik kısa kodlar (short_id) tamamlanıyor...");
-          let hasNewIds = false;
-          const existingShortIds = new Set(products.map(p => p.short_id).filter(Boolean));
-          
-          const updatedProducts = products.map(p => {
-              if (!p.short_id) {
-                  hasNewIds = true;
-                  let newId;
-                  do {
-                      newId = generateShortId();
-                  } while (existingShortIds.has(newId));
-                  existingShortIds.add(newId);
-                  return { ...p, short_id: newId };
-              }
-              return p;
-          });
-          
-          if (hasNewIds) {
-            console.log("Onarım tamamlandı, veriler kaydediliyor.");
-            saveData(updatedProducts, transactions, true); // Onarım işlemini "sessiz" kaydet
-          }
+  const saveData = React.useCallback((newProducts: Product[], newTransactions: Transaction[], silent: boolean = false) => {
+      try {
+        setProducts(newProducts);
+        setTransactions(newTransactions);
+        localStorage.setItem('depopro_products', JSON.stringify(newProducts));
+        localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
+      } catch (err: any) {
+        if (err.name === 'QuotaExceededError') {
+          alert("HATA: Tarayıcı hafızası dolu! Veriler kaydedilemedi. Lütfen eski verileri silin veya yedek alın.");
+        } else {
+          console.error("LocalStorage Save Error:", err);
+        }
+        return;
       }
-  }, [products]); 
+
+      if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
+          performCloudSave(newProducts, newTransactions, silent);
+      }
+  }, [cloudConfig]);
+
+  // --- AUTO-REPAIR EFFECT: Ensures short_id and barcode are always correct ---
+  useEffect(() => {
+    if (products.length === 0 && !isFirstLoad.current) return;
+
+    let needsUpdate = false;
+    const existingShortIds = new Set(products.map(p => p.short_id).filter(Boolean));
+    
+    const updatedProducts = products.map(p => {
+      let productChanged = false;
+      const newProduct = { ...p };
+
+      // 1. Generate short_id if missing
+      if (!newProduct.short_id) {
+        let newId;
+        do {
+          newId = generateShortId();
+        } while (existingShortIds.has(newId));
+        existingShortIds.add(newId);
+        newProduct.short_id = newId;
+        productChanged = true;
+      }
+
+      // 2. Sync barcode with short_id
+      if (newProduct.barcode !== newProduct.short_id) {
+        newProduct.barcode = newProduct.short_id;
+        productChanged = true;
+      }
+      
+      if(productChanged) {
+        needsUpdate = true;
+      }
+
+      return newProduct;
+    });
+
+    if (needsUpdate) {
+      console.log("Otomatik Onarım: Barkod ve Kısa Kodlar senkronize ediliyor...");
+      saveData(updatedProducts, transactions, true);
+    }
+  }, [products, transactions, saveData]);
 
   // --- AUTOMATIC CLOUD SYNC EFFECTS ---
   useEffect(() => {
@@ -183,26 +213,6 @@ function App() {
       localStorage.setItem('depopro_cloud_config', JSON.stringify(newConfig));
       setTimeout(() => performCloudLoad(false), 500);
   };
-
-  const saveData = React.useCallback((newProducts: Product[], newTransactions: Transaction[], silent: boolean = false) => {
-      try {
-        setProducts(newProducts);
-        setTransactions(newTransactions);
-        localStorage.setItem('depopro_products', JSON.stringify(newProducts));
-        localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
-      } catch (err: any) {
-        if (err.name === 'QuotaExceededError') {
-          alert("HATA: Tarayıcı hafızası dolu! Veriler kaydedilemedi. Lütfen eski verileri silin veya yedek alın.");
-        } else {
-          console.error("LocalStorage Save Error:", err);
-        }
-        return;
-      }
-
-      if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
-          performCloudSave(newProducts, newTransactions, silent);
-      }
-  }, [cloudConfig, products, transactions]);
 
   const performCloudSave = async (currentProducts: Product[], currentTransactions: Transaction[], silent: boolean = false) => {
       if (!cloudConfig?.supabaseUrl || !cloudConfig?.supabaseKey) return;
