@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { X, Printer, CheckSquare, Square, Search, Filter, Check, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 import { Product } from '../types';
@@ -54,9 +55,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                         lineColor: "#000",
                         width: 2,
                         height: 50,
-                        displayValue: true, 
-                        fontSize: 14,
-                        textMargin: 2,
+                        displayValue: false, // Sayıyı JSBarcode ile değil, aşağıda özel olarak yazacağız
                         margin: 10,
                         background: "#ffffff"
                     });
@@ -280,7 +279,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                                     </div>
                                     
                                     {/* Ortada Kısa ID Barkodu */}
-                                    <div className="flex-1 w-full flex items-center justify-center bg-slate-50 rounded-lg p-1 overflow-hidden">
+                                    <div className="flex-1 w-full flex flex-col items-center justify-center bg-slate-50 rounded-lg p-1 overflow-hidden">
                                         {imgSrc === 'MISSING_ID' ? (
                                             <div className="text-center">
                                                 <Loader2 size={16} className="text-amber-500 animate-spin mx-auto"/>
@@ -292,7 +291,10 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                                                 <span className="text-[9px] text-red-500 font-bold">Barkod Hatası</span>
                                             </div>
                                         ) : imgSrc ? (
+                                            <>
                                             <img src={imgSrc} alt="barcode" className="max-w-full max-h-full object-contain mix-blend-multiply" />
+                                            <span className="text-[9px] font-mono text-slate-400 leading-none mt-0.5">{product.short_id}</span>
+                                            </>
                                         ) : (
                                             <div className="text-center">
                                                  <Loader2 size={16} className="text-slate-400 animate-spin mx-auto"/>
@@ -314,7 +316,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         {validProducts.filter(p => selectedProductIds.has(p.id)).map(product => (
             <div key={`print-${product.id}`} className="label-container">
                 {/* 1. Üst Kısım: PARÇA KODU (Büyük ve Okunaklı) */}
-                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2mm' }}>
+                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1mm' }}>
                     <span style={{ fontSize: product.part_code && product.part_code.length > 12 ? '16pt' : '22pt', fontWeight: '900', fontFamily: 'monospace', letterSpacing: '-1px', lineHeight: '0.9' }}>
                         {product.part_code || ''}
                     </span>
@@ -324,13 +326,16 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 </div>
                 
                 {/* 2. Orta Kısım: BARKOD (Short ID verisini içerir) */}
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', flex: 1, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', flex: 1, overflow: 'hidden' }}>
                     {barcodeImages[product.id] && !['MISSING_ID', 'ERROR'].includes(barcodeImages[product.id]) ? (
+                         <>
                          <img 
                             src={barcodeImages[product.id]}
-                            style={{ maxWidth: '100%', maxHeight: '25mm' }}
+                            style={{ maxWidth: '100%', maxHeight: '22mm' }}
                             alt="barcode"
                         />
+                        <span style={{ fontSize: '8pt', fontFamily: 'monospace', marginTop: '1px' }}>ID: {product.short_id}</span>
+                        </>
                     ) : (
                         <div style={{ fontSize: '8pt' }}>KOD OLUŞTURULAMADI</div>
                     )}

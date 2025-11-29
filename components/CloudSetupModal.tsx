@@ -58,7 +58,7 @@ create table if not exists products (
   unit text,
   current_stock numeric,
   barcode text,
-  short_id text, -- Kısa barkod için 6 haneli kod
+  short_id text, -- Kısa barkod için 6 haneli kod (SABİT)
   created_at text,
   critical_since text,
   last_alert_sent_at text,
@@ -148,7 +148,7 @@ alter table products add column if not exists short_id text;
                     </div>
                     <div className="text-[10px] text-amber-600 dark:text-amber-500 flex items-start gap-1 bg-amber-50 dark:bg-amber-900/10 p-2 rounded">
                         <AlertTriangle size={12} className="min-w-[12px] mt-0.5" /> 
-                        Kodun sonundaki "disable row level security" komutları bağlantı hatalarını önlemek için kritiktir.
+                        Not: "short_id" sütunu, barkodun değişmemesi için zorunludur.
                     </div>
                 </div>
 

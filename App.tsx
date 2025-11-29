@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw, CheckCircle2, Loader2, WifiOff, Info } from 'lucide-react';
 import Dashboard from './components/Dashboard';
@@ -25,7 +26,7 @@ const BarcodePrinterModal = lazy(() => import('./components/BarcodePrinterModal'
 const generateId = () => Math.random().toString(36).substring(2, 11);
 const generateShortId = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const APP_VERSION = "1.5.0"; // Optimization Release
+const APP_VERSION = "1.5.1"; // Smart Sync Fix
 
 function App() {
   // --- AUTH STATE ---
@@ -171,9 +172,16 @@ function App() {
 
     if (needsUpdate) {
       console.log("Otomatik Onarım: Barkod ve Kısa Kodlar senkronize ediliyor...");
-      saveData(updatedProducts, transactions, true);
+      // Save locally first to persist the new IDs immediately, but don't loop cloud save yet
+      setProducts(updatedProducts);
+      localStorage.setItem('depopro_products', JSON.stringify(updatedProducts));
+      
+      // Now trigger save with cloud sync
+      if (cloudConfig?.supabaseUrl) {
+          saveData(updatedProducts, transactions, true);
+      }
     }
-  }, [products, transactions, saveData]);
+  }, [products, transactions, saveData, cloudConfig]);
 
   // --- AUTOMATIC CLOUD SYNC EFFECTS ---
   useEffect(() => {
@@ -249,18 +257,30 @@ function App() {
                const cloudProducts = result.data.products || [];
                const cloudTransactions = result.data.transactions || [];
                
+               // --- SMART MERGE LOGIC START ---
+               // Eğer buluttan gelen veride short_id yoksa, ama yerel veride varsa, yerel veriyi koru.
+               // Bu, veritabanı sütunu eksik olsa bile barkodun değişmesini engeller.
+               const mergedProducts = cloudProducts.map(cp => {
+                   const localMatch = products.find(lp => lp.id === cp.id);
+                   if (localMatch && localMatch.short_id && !cp.short_id) {
+                       return { ...cp, short_id: localMatch.short_id, barcode: localMatch.short_id };
+                   }
+                   return cp;
+               });
+               // --- SMART MERGE LOGIC END ---
+
                // Akıllı Hacim Kontrolü: Eğer buluttaki veri yerelden çok daha fazlaysa, zorla indir.
-               const isVolumeMismatch = cloudProducts.length > products.length + 5;
+               const isVolumeMismatch = mergedProducts.length > products.length + 5;
                
                if (!force && !isVolumeMismatch) {
-                   // Değişiklik yoksa veya yerel daha yeniyse (bu kontrol Supabase'de zor) pas geç
-                   if (JSON.stringify(cloudProducts) === JSON.stringify(products) && JSON.stringify(cloudTransactions) === JSON.stringify(transactions)) {
+                   // Değişiklik yoksa veya yerel daha yeniyse (basit kontrol) pas geç
+                   if (JSON.stringify(mergedProducts) === JSON.stringify(products) && JSON.stringify(cloudTransactions) === JSON.stringify(transactions)) {
                        if (!silent) setSyncStatus('IDLE');
                        return;
                    }
                }
                
-               saveData(cloudProducts, cloudTransactions, true); // Veriyi merkezi olarak kaydet (local+state)
+               saveData(mergedProducts, cloudTransactions, true); // Veriyi merkezi olarak kaydet
                
                if (!silent) setSyncStatus('SUCCESS');
                setLastSyncTime(new Date().toLocaleTimeString());
