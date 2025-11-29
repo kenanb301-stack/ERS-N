@@ -1,6 +1,6 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, Printer, MapPin, Hexagon, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef, useDeferredValue } from 'react';
+import { Search, Package, Edit, Trash2, Plus, FileSpreadsheet, Printer, MapPin, SlidersHorizontal, ArrowUpAZ, ArrowDownZA, RotateCcw } from 'lucide-react';
 import { Product, User } from '../types';
 
 interface InventoryListProps {
@@ -15,10 +15,106 @@ interface InventoryListProps {
 
 const ITEMS_PER_PAGE = 50;
 
+// Sort Options
+type SortKey = 'location' | 'part_code' | 'current_stock' | 'product_name';
+type SortDirection = 'asc' | 'desc';
+
+// --- MEMOIZED LIST ITEM (Performance Optimization) ---
+// Bu bileşen, sadece kendi verisi değiştiğinde yeniden çizilir.
+const InventoryItem = React.memo(({ product, currentUser, onDelete, onEdit }: { product: Product, currentUser: User, onDelete: (id: string) => void, onEdit: (p: Product) => void }) => {
+    const getStockStatusColor = (current: number, min: number) => {
+        if (current <= 0) return 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600';
+        if (current <= min) return 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/30';
+        if (current <= min * 1.5) return 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900/30';
+        return 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30';
+    };
+
+    return (
+        <div className={`bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-colors ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
+            <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-lg flex items-center justify-center border border-slate-100 dark:border-slate-600 shadow-sm flex-shrink-0">
+                    <Package className="text-slate-400" size={24} />
+                </div>
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-bold text-slate-800 dark:text-white text-base">{product.product_name}</h4>
+                        {product.material && (
+                            <span className="text-[10px] px-2 py-0.5 bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-full font-bold">
+                                {product.material}
+                            </span>
+                        )}
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400 font-mono">
+                        <div className="flex items-center gap-1 bg-white/50 dark:bg-slate-700/50 px-1.5 py-0.5 rounded">
+                            <span className="opacity-70">Kod:</span>
+                            <span className="font-bold text-slate-700 dark:text-slate-300">{product.part_code || '-'}</span>
+                        </div>
+                        {product.location && (
+                            <div className="flex items-center gap-1 bg-orange-50 dark:bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-100 dark:border-orange-900/30">
+                                <MapPin size={10} className="text-orange-500" />
+                                <span className="font-bold text-orange-700 dark:text-orange-400">{product.location}</span>
+                            </div>
+                        )}
+                        <div className="flex items-center gap-1">
+                            <span className="opacity-70">ID:</span>
+                            <span>{product.short_id}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex items-center justify-between w-full sm:w-auto gap-6 pl-16 sm:pl-0">
+                <div className="text-right">
+                    <span className="block text-2xl font-black text-slate-700 dark:text-slate-200">
+                        {product.current_stock}
+                        <span className="text-xs font-medium text-slate-400 ml-1">{product.unit}</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium bg-white/50 dark:bg-slate-700/50 px-2 py-0.5 rounded-full">
+                        Min: {product.min_stock_level}
+                    </span>
+                </div>
+
+                {currentUser.role === 'ADMIN' && (
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onEdit(product); }}
+                            className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40 rounded-lg transition-colors active:scale-95"
+                        >
+                            <Edit size={18} />
+                        </button>
+                        <button 
+                            onClick={(e) => { 
+                                e.stopPropagation();
+                                if(window.confirm('Bu ürünü silmek istediğinize emin misiniz?')) onDelete(product.id);
+                            }}
+                            className="p-2 text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 rounded-lg transition-colors active:scale-95"
+                        >
+                            <Trash2 size={18} />
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+});
+
 const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdit, onAddProduct, onBulkAdd, onPrintBarcodes, currentUser }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  
+  // Advanced Filter States
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('location');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'CRITICAL' | 'EMPTY'>('ALL');
+  const [filterMaterial, setFilterMaterial] = useState<string>('');
+
   const [currentPage, setCurrentPage] = useState(1);
+
+  // --- PERFORMANCE OPTIMIZATION ---
+  // useDeferredValue: Arama terimini geciktirerek klavyenin donmasını engeller.
+  // React, arayüzü güncellerken bu değerin işlenmesini düşük öncelikli yapar.
+  const deferredSearchTerm = useDeferredValue(searchTerm);
 
   // SCAN BUFFER
   const lastKeyTime = useRef<number>(0);
@@ -26,7 +122,6 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
 
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
-          // If searching input is focused, let normal behavior handle it
           if (document.activeElement?.tagName === 'INPUT') return;
 
           const now = Date.now();
@@ -35,11 +130,12 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
 
           if (e.key === 'Enter') {
               if (barcodeBuffer.current.length > 0) {
-                  // Resolve Short ID
                   const code = barcodeBuffer.current.trim();
+                  // Direkt kısa kod araması (String conversion önemli)
                   const product = products.find(p => String(p.short_id).trim() === code);
                   
                   if (product) {
+                      // Eğer ürün bulunursa direkt parça kodunu arama kutusuna yaz
                       setSearchTerm(product.part_code || '');
                   } else {
                       setSearchTerm(code);
@@ -55,38 +151,79 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
       return () => window.removeEventListener('keydown', handleKeyDown);
   }, [products]);
 
-  const filteredProducts = useMemo(() => {
-    return products.filter(product => {
-      const term = searchTerm.toLowerCase();
-      // Expanded search logic to include secure String conversion for numeric fields like short_id
-      const matchesSearch = product.product_name.toLowerCase().includes(term) || 
-                            (product.part_code && product.part_code.toLowerCase().includes(term)) ||
-                            (product.location && product.location.toLowerCase().includes(term)) ||
-                            (product.material && product.material.toLowerCase().includes(term)) ||
-                            (product.barcode && product.barcode.includes(term)) ||
-                            (product.id && product.id.toLowerCase() === term) ||
-                            (product.short_id && String(product.short_id).includes(term)); // Robust Short ID search
-      return matchesSearch;
+  // --- FILTERING & SORTING LOGIC ---
+  const processedProducts = useMemo(() => {
+    let result = products;
+
+    // 1. Text Search (Deferred Value kullanıyoruz)
+    if (deferredSearchTerm) {
+        const term = deferredSearchTerm.toLowerCase();
+        result = result.filter(product => {
+            return (
+                product.product_name.toLowerCase().includes(term) || 
+                (product.part_code && product.part_code.toLowerCase().includes(term)) ||
+                (product.location && product.location.toLowerCase().includes(term)) ||
+                (product.material && product.material.toLowerCase().includes(term)) ||
+                (product.barcode && product.barcode.includes(term)) ||
+                (product.id && product.id.toLowerCase() === term) ||
+                (product.short_id && String(product.short_id).includes(term))
+            );
+        });
+    }
+
+    // 2. Status Filter
+    if (filterStatus === 'CRITICAL') {
+        result = result.filter(p => p.current_stock <= p.min_stock_level && p.current_stock > 0);
+    } else if (filterStatus === 'EMPTY') {
+        result = result.filter(p => p.current_stock <= 0);
+    }
+
+    // 3. Material Filter
+    if (filterMaterial) {
+        result = result.filter(p => p.material === filterMaterial);
+    }
+
+    // 4. Sorting
+    result.sort((a, b) => {
+        let valA: any = a[sortKey];
+        let valB: any = b[sortKey];
+
+        if (!valA) valA = '';
+        if (!valB) valB = '';
+
+        if (sortKey === 'current_stock') {
+            return sortDirection === 'asc' ? valA - valB : valB - valA;
+        }
+
+        const compareResult = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+        return sortDirection === 'asc' ? compareResult : -compareResult;
     });
-  }, [products, searchTerm]);
 
-  // Reset page when search changes
-  useMemo(() => {
+    return result;
+  }, [products, deferredSearchTerm, sortKey, sortDirection, filterStatus, filterMaterial]);
+
+  // Reset page when filters change
+  useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [deferredSearchTerm, filterStatus, filterMaterial]);
 
-  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
-  const currentData = filteredProducts.slice(
+  // Pagination Logic
+  const totalPages = Math.ceil(processedProducts.length / ITEMS_PER_PAGE);
+  const currentData = processedProducts.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
 
-  const getStockStatusColor = (current: number, min: number) => {
-    if (current === 0) return 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600';
-    if (current <= min) return 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/30';
-    if (current <= min * 1.5) return 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900/30';
-    return 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30';
+  const handleSortChange = (key: SortKey) => {
+      if (sortKey === key) {
+          setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+      } else {
+          setSortKey(key);
+          setSortDirection('asc');
+      }
   };
+
+  const activeFilterCount = (filterStatus !== 'ALL' ? 1 : 0) + (filterMaterial ? 1 : 0);
 
   return (
     <div className="space-y-4 pb-20 h-full flex flex-col">
@@ -121,185 +258,156 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
           </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 sticky top-0 z-10 transition-colors">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input
-            type="text"
-            placeholder="Parça Kodu, Adı, Hammadde veya Reyon ara..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-          />
-        </div>
-        
-        <button
-            onClick={onPrintBarcodes}
-            className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg transition-colors font-medium border border-slate-200 dark:border-slate-600"
-        >
-            <Printer size={18} />
-            <span className="hidden lg:inline">Etiket Yazdır</span>
-        </button>
-      </div>
-
-      {/* Product List */}
-      <div className="grid gap-3">
-        {filteredProducts.length === 0 ? (
-          <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
-            <Package className="mx-auto text-slate-300 dark:text-slate-600 mb-2" size={48} />
-            <p className="text-slate-500 dark:text-slate-400">Kayıtlı parça/ürün bulunamadı.</p>
-            {currentUser.role === 'ADMIN' && (
-                <div className="flex justify-center gap-3 mt-4">
-                    <button onClick={onAddProduct} className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
-                        Yeni Parça Ekle
-                    </button>
-                    <span className="text-slate-300 dark:text-slate-600">|</span>
-                    <button onClick={onBulkAdd} className="text-green-600 dark:text-green-400 font-medium hover:underline">
-                        Excel ile Yükle
-                    </button>
-                </div>
-            )}
-          </div>
-        ) : (
-          currentData.map(product => (
-            <div 
-              key={product.id} 
-              className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:shadow-md transition-all relative group"
-            >
-              <div className="flex-1 flex gap-4 items-start sm:items-center">
-                
-                <div className="flex-1 w-full">
-                    <div className="flex flex-col gap-1">
-                        <div className="flex justify-between items-start w-full">
-                            <div>
-                                {/* Parça Kodu ve Adı */}
-                                <div className="flex flex-wrap items-center gap-2 mb-1">
-                                    {product.part_code && (
-                                        <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded inline-block">
-                                            {product.part_code}
-                                        </span>
-                                    )}
-                                </div>
-                                <h3 className="font-bold text-slate-800 dark:text-white text-lg leading-tight">
-                                    {product.product_name}
-                                </h3>
-                            </div>
-                            <div className={`sm:hidden px-3 py-1 rounded-lg border text-sm font-bold whitespace-nowrap ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
-                                {product.current_stock} <span className="text-xs font-normal">{product.unit}</span>
-                            </div>
-                        </div>
-                        
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500 dark:text-slate-400 mt-1">
-                            {/* Reyon Bilgisi */}
-                            {product.location && (
-                                <div className="flex items-center gap-1 text-slate-700 dark:text-slate-300 font-medium bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
-                                    <MapPin size={14} className="text-orange-500" />
-                                    <span>{product.location}</span>
-                                </div>
-                            )}
-                            
-                            {/* Hammadde */}
-                            {product.material && (
-                                <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400 font-medium">
-                                    <Hexagon size={14} />
-                                    <span className="line-clamp-1">{product.material}</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between sm:justify-end gap-6 mt-2 sm:mt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-700 pt-3 sm:pt-0">
-                
-                <div className="hidden sm:block text-right min-w-[100px]">
-                    <div className={`px-3 py-1 rounded-lg border text-lg font-bold inline-block ${getStockStatusColor(product.current_stock, product.min_stock_level)}`}>
-                        {product.current_stock} <span className="text-sm font-normal opacity-80">{product.unit}</span>
-                    </div>
-                    <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">Min: {product.min_stock_level}</div>
-                </div>
-
-                {currentUser.role === 'ADMIN' && (
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                        <button 
-                            type="button"
-                            onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit(product);
-                            }}
-                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 dark:hover:text-blue-400 rounded-lg transition-colors relative z-10"
-                            title="Düzenle"
-                        >
-                            <Edit size={18} />
-                        </button>
-                        
-                        {deleteConfirmId === product.id ? (
-                            <div className="flex items-center gap-1 animate-fade-in">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onDelete(product.id);
-                                        setDeleteConfirmId(null);
-                                    }}
-                                    className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm"
-                                    title="Silmeyi Onayla"
-                                >
-                                    <Check size={18} />
-                                </button>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeleteConfirmId(null);
-                                    }}
-                                    className="p-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
-                                    title="İptal"
-                                >
-                                    <X size={18} />
-                                </button>
-                            </div>
-                        ) : (
-                            <button 
-                                type="button"
-                                onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirmId(product.id);
-                                }}
-                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-colors relative z-10"
-                                title="Sil"
-                            >
-                                <Trash2 size={18} />
-                            </button>
-                        )}
+      {/* Search & Main Filter Toolbar */}
+      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 sticky top-0 z-10 transition-colors">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                    type="text"
+                    placeholder="Parça Kodu, Adı veya Barkod ara..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                />
+                {/* Loading Indicator for Deferred Search */}
+                {searchTerm !== deferredSearchTerm && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                     </div>
                 )}
-              </div>
             </div>
-          ))
+            
+            <button 
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors border ${showFilters || activeFilterCount > 0 ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}`}
+            >
+                <SlidersHorizontal size={18} />
+                <span className="hidden sm:inline">Sırala & Filtrele</span>
+                {activeFilterCount > 0 && (
+                    <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center ml-1">
+                        {activeFilterCount}
+                    </span>
+                )}
+            </button>
+
+            <button
+                onClick={onPrintBarcodes}
+                className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-lg transition-colors font-medium border border-slate-200 dark:border-slate-600"
+            >
+                <Printer size={18} />
+                <span className="hidden lg:inline">Etiket</span>
+            </button>
+          </div>
+
+          {/* ADVANCED FILTER PANEL */}
+          {showFilters && (
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-fade-in">
+                  
+                  {/* Sorting Options */}
+                  <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Sıralama</label>
+                      <div className="grid grid-cols-2 gap-2">
+                          <button onClick={() => handleSortChange('location')} className={`flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-bold transition-colors border ${sortKey === 'location' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}`}>
+                              <MapPin size={14} /> Reyon
+                              {sortKey === 'location' && (sortDirection === 'asc' ? <ArrowUpAZ size={14}/> : <ArrowDownZA size={14}/>)}
+                          </button>
+                          <button onClick={() => handleSortChange('part_code')} className={`flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-bold transition-colors border ${sortKey === 'part_code' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}`}>
+                              # Parça Kodu
+                              {sortKey === 'part_code' && (sortDirection === 'asc' ? <ArrowUpAZ size={14}/> : <ArrowDownZA size={14}/>)}
+                          </button>
+                          <button onClick={() => handleSortChange('current_stock')} className={`flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-bold transition-colors border ${sortKey === 'current_stock' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}`}>
+                              <Package size={14} /> Stok Miktarı
+                              {sortKey === 'current_stock' && (sortDirection === 'asc' ? <ArrowUpAZ size={14}/> : <ArrowDownZA size={14}/>)}
+                          </button>
+                      </div>
+                  </div>
+
+                  {/* Filter Options */}
+                  <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Filtrele</label>
+                        <div className="flex gap-2">
+                            <select 
+                                value={filterStatus}
+                                onChange={(e) => setFilterStatus(e.target.value as any)}
+                                className="flex-1 p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold outline-none"
+                            >
+                                <option value="ALL">Tüm Durumlar</option>
+                                <option value="CRITICAL">Kritik Stok</option>
+                                <option value="EMPTY">Tükenmiş</option>
+                            </select>
+                        </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-end justify-end">
+                      <button 
+                        onClick={() => {
+                            setFilterStatus('ALL');
+                            setFilterMaterial('');
+                            setSortKey('location');
+                            setSortDirection('asc');
+                            setSearchTerm('');
+                        }}
+                        className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                      >
+                          <RotateCcw size={14} />
+                          Sıfırla
+                      </button>
+                  </div>
+              </div>
+          )}
+      </div>
+
+      {/* Product List - MEMOIZED ITEMS */}
+      <div className="space-y-3">
+        {currentData.length === 0 ? (
+            <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
+                <Package className="mx-auto text-slate-300 dark:text-slate-600 mb-2" size={48} />
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Sonuç bulunamadı.</p>
+                {(searchTerm || activeFilterCount > 0) && (
+                    <button 
+                        onClick={() => { setSearchTerm(''); setFilterStatus('ALL'); setFilterMaterial(''); }}
+                        className="mt-4 text-blue-600 dark:text-blue-400 text-sm hover:underline font-medium"
+                    >
+                        Filtreleri Temizle
+                    </button>
+                )}
+            </div>
+        ) : (
+            currentData.map(product => (
+                <InventoryItem 
+                    key={product.id} 
+                    product={product} 
+                    currentUser={currentUser} 
+                    onDelete={onDelete} 
+                    onEdit={onEdit} 
+                />
+            ))
         )}
       </div>
 
       {/* Pagination Controls */}
-      {filteredProducts.length > ITEMS_PER_PAGE && (
-        <div className="flex justify-center items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-700">
-            <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+      {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-4 mt-4 py-4">
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-slate-200 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-            >
-                <ChevronLeft size={20} className="text-slate-600 dark:text-slate-300" />
-            </button>
-            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-                Sayfa {currentPage} / {totalPages}
-            </span>
-            <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                  Önceki
+              </button>
+              <span className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                  Sayfa {currentPage} / {totalPages}
+              </span>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="p-2 rounded-lg border border-slate-200 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-            >
-                <ChevronRight size={20} className="text-slate-600 dark:text-slate-300" />
-            </button>
-        </div>
+                className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                  Sonraki
+              </button>
+          </div>
       )}
     </div>
   );

@@ -11,18 +11,8 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Hata Sınırı Bileşeni (React Error Boundary)
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-  }
-
-  // Use class property to initialize state. This is cleaner and avoids
-  // constructor boilerplate, while correctly typing the state.
-  state: ErrorBoundaryState = {
-    hasError: false,
-    error: null,
-  };
+  public state: ErrorBoundaryState = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
