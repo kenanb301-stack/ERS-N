@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw, CheckCircle2, Loader2, WifiOff, Info } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
@@ -8,22 +8,24 @@ import ProductModal from './components/ProductModal';
 import BulkTransactionModal from './components/BulkTransactionModal';
 import NegativeStockList from './components/NegativeStockList';
 import OrderSimulatorModal from './components/OrderSimulatorModal';
-import BarcodePrinterModal from './components/BarcodePrinterModal';
 import BarcodeScanner from './components/BarcodeScanner';
-import Analytics from './components/Analytics';
 import Login from './components/Login';
 import DataBackupModal from './components/DataBackupModal';
 import CloudSetupModal from './components/CloudSetupModal';
-import CycleCountModal from './components/CycleCountModal'; // IMPORT ADDED
+import CycleCountModal from './components/CycleCountModal'; 
 import { saveToSupabase, loadFromSupabase, clearDatabase } from './services/supabase';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState, User, CloudConfig } from './types';
+
+// Lazy Load Heavy Components
+const Analytics = lazy(() => import('./components/Analytics'));
+const BarcodePrinterModal = lazy(() => import('./components/BarcodePrinterModal'));
 
 // Utility to generate simple ID
 const generateId = () => Math.random().toString(36).substring(2, 11);
 const generateShortId = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const APP_VERSION = "1.4.2";
+const APP_VERSION = "1.5.0"; // Optimization Release
 
 function App() {
   // --- AUTH STATE ---
@@ -61,6 +63,7 @@ function App() {
   // SYNC STATES
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const isFirstLoad = useRef(true);
 
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   
@@ -80,7 +83,7 @@ function App() {
   const [isBarcodePrinterOpen, setIsBarcodePrinterOpen] = useState(false);
   const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
   const [isCloudSetupOpen, setIsCloudSetupOpen] = useState(false);
-  const [isCycleCountOpen, setIsCycleCountOpen] = useState(false); // STATE ADDED
+  const [isCycleCountOpen, setIsCycleCountOpen] = useState(false);
 
   // Global Scanner State
   const [isGlobalScannerOpen, setIsGlobalScannerOpen] = useState(false);
@@ -88,7 +91,6 @@ function App() {
   // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
-    // Default to true (Dark Mode) if no preference is saved
     return saved ? JSON.parse(saved) : true;
   });
 
@@ -113,39 +115,44 @@ function App() {
   }, [currentUser]);
 
   // --- MIGRATION EFFECT: Generate Short IDs for old products ---
-  // Bu useEffect artık products değiştiğinde de çalışacak (Buluttan veri gelince düzeltmek için)
   useEffect(() => {
       if (products.length === 0) return;
 
       const productsMissingShortId = products.some(p => !p.short_id);
       
       if (productsMissingShortId) {
-          console.log("Migrating products to include persistent short_id...");
+          console.log("Onarım: Eksik kısa kodlar (short_id) tamamlanıyor...");
           let hasNewIds = false;
+          const existingShortIds = new Set(products.map(p => p.short_id).filter(Boolean));
+          
           const updatedProducts = products.map(p => {
               if (!p.short_id) {
                   hasNewIds = true;
-                  return { ...p, short_id: generateShortId() };
+                  let newId;
+                  do {
+                      newId = generateShortId();
+                  } while (existingShortIds.has(newId));
+                  existingShortIds.add(newId);
+                  return { ...p, short_id: newId };
               }
               return p;
           });
           
           if (hasNewIds) {
-            // Use CENTRALIZED save to ensure it goes to cloud immediately
-            saveData(updatedProducts, transactions);
+            console.log("Onarım tamamlandı, veriler kaydediliyor.");
+            saveData(updatedProducts, transactions, true); // Onarım işlemini "sessiz" kaydet
           }
       }
-  }, [products]); // Her ürün güncellemesinde kontrol et.
+  }, [products]); 
 
   // --- AUTOMATIC CLOUD SYNC EFFECTS ---
-  
-  // 1. Initial Load & Periodic Polling
   useEffect(() => {
       if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey && currentUser) {
-          // App açılışında otomatik çek
-          performCloudLoad(true);
+          if (isFirstLoad.current) {
+              performCloudLoad(true); 
+              isFirstLoad.current = false;
+          }
 
-          // Her 60 saniyede bir arka planda kontrol et
           const intervalId = setInterval(() => {
               performCloudLoad(true);
           }, 60000);
@@ -174,59 +181,53 @@ function App() {
       const newConfig = { supabaseUrl: url, supabaseKey: key };
       setCloudConfig(newConfig);
       localStorage.setItem('depopro_cloud_config', JSON.stringify(newConfig));
-      // Config kaydedilince hemen bir çekme işlemi yap
       setTimeout(() => performCloudLoad(false), 500);
   };
 
-  // Centralized Save Function (Write to Local + Trigger Cloud)
-  const saveData = (newProducts: Product[], newTransactions: Transaction[]) => {
-      const now = new Date().toISOString();
-      localStorage.setItem('depopro_last_updated', now); // Update local timestamp immediately
-
+  const saveData = React.useCallback((newProducts: Product[], newTransactions: Transaction[], silent: boolean = false) => {
       try {
-        // 1. Update React State (Instant UI update)
         setProducts(newProducts);
         setTransactions(newTransactions);
-
-        // 2. Update LocalStorage (Backup)
         localStorage.setItem('depopro_products', JSON.stringify(newProducts));
         localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
-      } catch (err) {
-        console.error("LocalStorage Save Error:", err);
-        alert("HATA: Veriler tarayıcı hafızasına yazılamadı. Cihaz hafızası dolmuş olabilir.");
+      } catch (err: any) {
+        if (err.name === 'QuotaExceededError') {
+          alert("HATA: Tarayıcı hafızası dolu! Veriler kaydedilemedi. Lütfen eski verileri silin veya yedek alın.");
+        } else {
+          console.error("LocalStorage Save Error:", err);
+        }
         return;
       }
 
-      // 3. Trigger Auto Cloud Sync (Fire and forget)
       if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
-          performCloudSave(newProducts, newTransactions);
+          performCloudSave(newProducts, newTransactions, silent);
       }
-  };
+  }, [cloudConfig, products, transactions]);
 
-  const performCloudSave = async (currentProducts: Product[], currentTransactions: Transaction[]) => {
+  const performCloudSave = async (currentProducts: Product[], currentTransactions: Transaction[], silent: boolean = false) => {
       if (!cloudConfig?.supabaseUrl || !cloudConfig?.supabaseKey) return;
 
-      setSyncStatus('SYNCING');
+      if (!silent) setSyncStatus('SYNCING');
       try {
-          // Supabase'e tüm veriyi upsert ediyoruz (merge mantığı)
           const result = await saveToSupabase(cloudConfig.supabaseUrl, cloudConfig.supabaseKey, currentProducts, currentTransactions);
 
           if (result.success) {
-              setSyncStatus('SUCCESS');
-              setLastSyncTime(new Date().toLocaleTimeString());
-              // 3 saniye sonra success durumunu idle'a çek
-              setTimeout(() => setSyncStatus('IDLE'), 3000);
+              if (!silent) {
+                  setSyncStatus('SUCCESS');
+                  setLastSyncTime(new Date().toLocaleTimeString());
+                  setTimeout(() => setSyncStatus('IDLE'), 3000);
+              }
           } else {
               console.error(result.message);
-              setSyncStatus('ERROR');
+              if (!silent) setSyncStatus('ERROR');
           }
       } catch (e) {
-          setSyncStatus('ERROR');
+          if (!silent) setSyncStatus('ERROR');
           console.error(e);
       }
   };
-
-  const performCloudLoad = async (silent: boolean = false, force: boolean = false) => {
+  
+   const performCloudLoad = async (silent: boolean = false, force: boolean = false) => {
        if (!cloudConfig?.supabaseUrl || !cloudConfig?.supabaseKey) return;
 
        if (!silent) setSyncStatus('SYNCING');
@@ -237,26 +238,25 @@ function App() {
            if (result.success && result.data) {
                const cloudProducts = result.data.products || [];
                const cloudTransactions = result.data.transactions || [];
-
-               // Değişiklik yoksa render etme
-               if (JSON.stringify(cloudProducts) === JSON.stringify(products) && JSON.stringify(cloudTransactions) === JSON.stringify(transactions)) {
-                   if (!silent) setSyncStatus('SUCCESS');
-                   setTimeout(() => setSyncStatus('IDLE'), 3000);
-                   return;
+               
+               // Akıllı Hacim Kontrolü: Eğer buluttaki veri yerelden çok daha fazlaysa, zorla indir.
+               const isVolumeMismatch = cloudProducts.length > products.length + 5;
+               
+               if (!force && !isVolumeMismatch) {
+                   // Değişiklik yoksa veya yerel daha yeniyse (bu kontrol Supabase'de zor) pas geç
+                   if (JSON.stringify(cloudProducts) === JSON.stringify(products) && JSON.stringify(cloudTransactions) === JSON.stringify(transactions)) {
+                       if (!silent) setSyncStatus('IDLE');
+                       return;
+                   }
                }
-
-               // Gelen veriyi local state ile güncelle
-               setProducts(cloudProducts);
-               setTransactions(cloudTransactions);
                
-               // LocalStorage'ı da güncelle
-               localStorage.setItem('depopro_products', JSON.stringify(cloudProducts));
-               localStorage.setItem('depopro_transactions', JSON.stringify(cloudTransactions));
+               saveData(cloudProducts, cloudTransactions, true); // Veriyi merkezi olarak kaydet (local+state)
                
-               setSyncStatus('SUCCESS');
+               if (!silent) setSyncStatus('SUCCESS');
                setLastSyncTime(new Date().toLocaleTimeString());
-               if (!silent) alert("Veriler buluttan güncellendi.");
+               if (!silent && !isFirstLoad.current) alert("Veriler buluttan güncellendi.");
                setTimeout(() => setSyncStatus('IDLE'), 3000);
+
            } else {
                if (!silent) alert(result.message);
                setSyncStatus('ERROR');
@@ -266,6 +266,7 @@ function App() {
            setSyncStatus('ERROR');
        }
   };
+
 
   // --- DATA SYNC LOGIC (FILE BACKUP) ---
   const handleBackupData = () => {
@@ -294,7 +295,7 @@ function App() {
               try {
                   const json = JSON.parse(e.target?.result as string);
                   if (json.products && Array.isArray(json.products) && json.transactions && Array.isArray(json.transactions)) {
-                      saveData(json.products, json.transactions); // Use centralized save
+                      saveData(json.products, json.transactions); 
                       resolve();
                   } else {
                       reject(new Error("Geçersiz yedek dosyası formatı"));
@@ -312,7 +313,6 @@ function App() {
       if(!confirm("DİKKAT: Bu işlem tüm stokları, parçaları ve hareket geçmişini kalıcı olarak silecektir. Emin misiniz?")) return;
       if(!confirm("SON UYARI: Hem telefonunuzdaki hem de buluttaki veriler silinecek. Fabrika ayarlarına dönülecek. Onaylıyor musunuz?")) return;
 
-      // 1. Clear Supabase if connected
       if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
           try {
               const res = await clearDatabase(cloudConfig.supabaseUrl, cloudConfig.supabaseKey);
@@ -325,13 +325,11 @@ function App() {
           }
       }
 
-      // 2. Clear Local Storage
       localStorage.removeItem('depopro_products');
       localStorage.removeItem('depopro_transactions');
       
-      // 3. Reset State (To Initial mock data or empty)
-      setProducts(INITIAL_PRODUCTS);
-      setTransactions(INITIAL_TRANSACTIONS);
+      setProducts([]);
+      setTransactions([]);
       
       alert("Sistem başarıyla sıfırlandı.");
       window.location.reload();
@@ -340,7 +338,7 @@ function App() {
 
   // 1. Transaction Logic (Create or Edit)
   const handleTransactionSubmit = (data: { id?: string; productId: string; quantity: number; description: string; type: TransactionType }) => {
-    if (currentUser?.role !== 'ADMIN') return; // Security check
+    if (currentUser?.role !== 'ADMIN') return; 
 
     const newProductTarget = products.find(p => p.id === data.productId);
     if (!newProductTarget) return;
@@ -359,7 +357,6 @@ function App() {
         updatedProducts = updatedProducts.map(p => {
             let stock = p.current_stock;
             
-            // Revert & Apply Logic
             if (p.id === oldProductId) {
                 stock = oldTransaction.type === TransactionType.IN 
                     ? stock - oldTransaction.quantity 
@@ -372,7 +369,6 @@ function App() {
                     : stock - data.quantity;
             }
 
-            // CRITICAL STOCK DATE LOGIC
             let criticalSince = p.critical_since;
             let lastAlert = p.last_alert_sent_at;
             
@@ -394,7 +390,6 @@ function App() {
             };
         });
 
-        // Update Transaction Record
         updatedTransactions = updatedTransactions.map(t => {
             if (t.id === data.id) {
                 let prevStockSnapshot = t.previous_stock;
@@ -464,7 +459,6 @@ function App() {
         updatedTransactions = [newTransaction, ...updatedTransactions];
     }
 
-    // Save ALL
     saveData(updatedProducts, updatedTransactions);
 
     setIsModalOpen(false);
@@ -515,7 +509,6 @@ function App() {
           
           const updatedTransactions = transactions.filter(t => t.id !== id);
           
-          // Save ALL
           saveData(updatedProducts, updatedTransactions);
       }
       
@@ -526,11 +519,10 @@ function App() {
 
   const handleEditTransactionClick = (transaction: Transaction) => {
       setEditingTransaction(transaction);
-      // If it's a correction, default to IN, but UI might need adjustment.
       setModalType(transaction.type === TransactionType.CORRECTION ? TransactionType.IN : transaction.type);
       setPreSelectedBarcode('');
       setIsModalOpen(true);
-  }
+  };
 
   // 2. Product Create & Edit Logic
   const handleSaveProduct = (data: any) => {
@@ -539,25 +531,28 @@ function App() {
     let updatedProducts = [...products];
 
     if (editingProduct) {
-        // Edit Existing
         const { current_stock, ...updateData } = data;
         
         updatedProducts = updatedProducts.map(p => 
             p.id === editingProduct.id ? { ...p, ...updateData } : p
         );
     } else {
-        // Create New
+        const existingShortIds = new Set(products.map(p => p.short_id));
+        let newShortId;
+        do {
+            newShortId = generateShortId();
+        } while (existingShortIds.has(newShortId));
+        
         const newProduct: Product = {
             id: `p-${generateId()}`,
             ...data,
-            short_id: generateShortId(), // Generate SHORT ID on creation
+            short_id: newShortId, 
             created_at: new Date().toISOString(),
             critical_since: data.current_stock <= data.min_stock_level ? new Date().toISOString() : undefined
         };
         updatedProducts = [...updatedProducts, newProduct];
     }
     
-    // Save ALL (Transactions don't change, but need to pass them)
     saveData(updatedProducts, transactions);
     
     setIsProductModalOpen(false);
@@ -603,7 +598,6 @@ function App() {
             new_stock: newStock
         });
 
-        // Update product in temp array
         updatedProducts = updatedProducts.map(p => {
             if(p.id === item.productId) {
                 let criticalSince = p.critical_since;
@@ -640,13 +634,22 @@ function App() {
   const handleBulkProductProcess = (newProductsData: any[]) => {
       if (currentUser?.role !== 'ADMIN') return;
 
-      const newProducts: Product[] = newProductsData.map(p => ({
-          id: `p-${generateId()}`,
-          ...p,
-          short_id: generateShortId(), // Generate SHORT ID on bulk import
-          created_at: new Date().toISOString(),
-          critical_since: p.current_stock <= p.min_stock_level ? new Date().toISOString() : undefined
-      }));
+      const existingShortIds = new Set(products.map(p => p.short_id));
+      const newProducts: Product[] = newProductsData.map(p => {
+          let newShortId;
+          do {
+            newShortId = generateShortId();
+          } while (existingShortIds.has(newShortId));
+          existingShortIds.add(newShortId);
+
+          return {
+              id: `p-${generateId()}`,
+              ...p,
+              short_id: newShortId,
+              created_at: new Date().toISOString(),
+              critical_since: p.current_stock <= p.min_stock_level ? new Date().toISOString() : undefined
+          };
+      });
 
       const updatedProducts = [...products, ...newProducts];
       saveData(updatedProducts, transactions);
@@ -674,19 +677,17 @@ function App() {
       const diff = countedQty - product.current_stock;
       const now = new Date().toISOString();
 
-      // Update Product
       const updatedProducts = products.map(p => {
           if (p.id === productId) {
               return {
                   ...p,
-                  current_stock: countedQty, // Update to actual physical count
+                  current_stock: countedQty, 
                   last_counted_at: now
               };
           }
           return p;
       });
 
-      // Create Correction Transaction if there is a difference
       let updatedTransactions = [...transactions];
       if (diff !== 0) {
           const correctionTx: Transaction = {
@@ -707,7 +708,6 @@ function App() {
       saveData(updatedProducts, updatedTransactions);
   };
 
-  // YENİ: Raporlanan ürünlerin işaretlenmesi
   const handleReportSent = (productIds: string[]) => {
       const now = new Date().toISOString();
       const updatedProducts = products.map(p => {
@@ -731,7 +731,6 @@ function App() {
       setIsBulkModalOpen(true);
   };
 
-  // Global Scan Handler
   const handleGlobalScanClick = () => {
       setIsGlobalScannerOpen(true);
   };
@@ -758,7 +757,6 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col md:flex-row transition-colors duration-300">
       
-      {/* GLOBAL SCANNER OVERLAY */}
       {isGlobalScannerOpen && (
           <BarcodeScanner 
             onScanSuccess={handleGlobalScanSuccess}
@@ -808,7 +806,6 @@ function App() {
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 space-y-3">
              {currentUser.role === 'ADMIN' && (
                  <>
-                    {/* Cloud Status */}
                     <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-700/50">
                         <div className="flex items-center gap-2">
                             {syncStatus === 'SYNCING' && <Loader2 size={16} className="text-blue-500 animate-spin" />}
@@ -817,7 +814,7 @@ function App() {
                             {syncStatus === 'IDLE' && <Cloud size={16} className={cloudConfig?.supabaseUrl ? "text-blue-500" : "text-slate-400"} />}
                             <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
                                 {syncStatus === 'SYNCING' ? 'Eşitleniyor...' : 
-                                 syncStatus === 'SUCCESS' ? 'Eşitlendi' :
+                                 syncStatus === 'SUCCESS' ? `Eşitlendi (${lastSyncTime})` :
                                  syncStatus === 'ERROR' ? 'Hata' : 
                                  cloudConfig?.supabaseUrl ? 'Otomatik' : 'Yerel Mod'}
                             </span>
@@ -842,23 +839,13 @@ function App() {
              )}
 
              {currentUser.role === 'ADMIN' && (
-                 <>
-                    <button 
-                        onClick={() => setIsDataBackupOpen(true)}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
-                    >
-                        <DownloadCloud size={18} className="text-slate-500" />
-                        Yerel Yedek
-                    </button>
-                    
-                    <button 
-                        onClick={handleResetData}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-sm font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all border border-transparent hover:border-red-100"
-                    >
-                        <AlertTriangle size={18} />
-                        Sıfırla
-                    </button>
-                 </>
+                <button 
+                    onClick={() => setIsDataBackupOpen(true)}
+                    className="w-full flex items-center gap-3 px-4 py-2 rounded-xl text-sm font-medium transition-all hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+                >
+                    <DownloadCloud size={18} className="text-slate-500" />
+                    Yerel Yedek/Sıfırla
+                </button>
              )}
 
              <button 
@@ -914,106 +901,107 @@ function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto h-auto min-h-[calc(100vh-140px)] md:h-screen pb-24 md:pb-8">
-        <div className="max-w-5xl mx-auto">
-            <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                    {currentView === 'DASHBOARD' && 'Genel Bakış'}
-                    {currentView === 'ANALYTICS' && 'Analiz Raporları'}
-                    {currentView === 'INVENTORY' && 'Stok Listesi'}
-                    {currentView === 'HISTORY' && 'Hareket Geçmişi'}
-                    {currentView === 'NEGATIVE_STOCK' && 'Dikkat Gerektiren Ürünler'}
-                </h2>
-                
-                {currentUser.role === 'ADMIN' && (
-                    <div className="flex gap-2">
-                        {/* Mobile Only Extra Sync Buttons */}
-                        <div className="md:hidden flex gap-2">
-                            {cloudConfig?.supabaseUrl ? (
-                                <button 
-                                    onClick={() => performCloudLoad(false, true)}
-                                    className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1"
-                                >
-                                    <RefreshCw size={16} /> Güncelle
-                                </button>
-                            ) : (
-                                <button 
-                                    onClick={() => setIsCloudSetupOpen(true)}
-                                    className="bg-amber-100 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1 animate-pulse"
-                                >
-                                    <Cloud size={18} /> Bağla
-                                </button>
+        <Suspense fallback={<div className="flex justify-center items-center h-64"><Loader2 className="animate-spin text-blue-500" size={48} /></div>}>
+            <div className="max-w-5xl mx-auto">
+                <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                        {currentView === 'DASHBOARD' && 'Genel Bakış'}
+                        {currentView === 'ANALYTICS' && 'Analiz Raporları'}
+                        {currentView === 'INVENTORY' && 'Stok Listesi'}
+                        {currentView === 'HISTORY' && 'Hareket Geçmişi'}
+                        {currentView === 'NEGATIVE_STOCK' && 'Dikkat Gerektiren Ürünler'}
+                    </h2>
+                    
+                    {currentUser.role === 'ADMIN' && (
+                        <div className="flex gap-2">
+                            <div className="md:hidden flex gap-2">
+                                {cloudConfig?.supabaseUrl ? (
+                                    <button 
+                                        onClick={() => performCloudLoad(false, true)}
+                                        className="bg-slate-100 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1"
+                                    >
+                                        <RefreshCw size={16} /> Güncelle
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={() => setIsCloudSetupOpen(true)}
+                                        className="bg-amber-100 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-1 animate-pulse"
+                                    >
+                                        <Cloud size={18} /> Bağla
+                                    </button>
+                                )}
+                            </div>
+
+                            {currentView === 'INVENTORY' && (
+                                <>
+                                    <button 
+                                        onClick={() => openBulkModal('PRODUCT')}
+                                        className="hidden sm:flex bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium items-center gap-2 transition-colors shadow-lg shadow-green-200 dark:shadow-none"
+                                    >
+                                        <FileSpreadsheet size={18} /> <span className="hidden sm:inline">Excel Yükle</span>
+                                    </button>
+                                    <button 
+                                        onClick={handleAddProductClick}
+                                        className="hidden sm:flex bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium items-center gap-2 transition-colors shadow-lg shadow-blue-200 dark:shadow-none"
+                                    >
+                                        <Plus size={18} /> <span className="hidden sm:inline">Ürün Ekle</span>
+                                    </button>
+                                </>
                             )}
                         </div>
+                    )}
+                </div>
 
-                        {currentView === 'INVENTORY' && (
-                            <>
-                                <button 
-                                    onClick={() => openBulkModal('PRODUCT')}
-                                    className="hidden sm:flex bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium items-center gap-2 transition-colors shadow-lg shadow-green-200 dark:shadow-none"
-                                >
-                                    <FileSpreadsheet size={18} /> <span className="hidden sm:inline">Excel Yükle</span>
-                                </button>
-                                <button 
-                                    onClick={handleAddProductClick}
-                                    className="hidden sm:flex bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium items-center gap-2 transition-colors shadow-lg shadow-blue-200 dark:shadow-none"
-                                >
-                                    <Plus size={18} /> <span className="hidden sm:inline">Ürün Ekle</span>
-                                </button>
-                            </>
-                        )}
-                    </div>
+                {currentView === 'DASHBOARD' && (
+                    <Dashboard 
+                        products={products} 
+                        transactions={transactions} 
+                        onQuickAction={openQuickAction}
+                        onProductClick={(p) => setCurrentView('INVENTORY')}
+                        onBulkAction={() => openBulkModal('TRANSACTION')}
+                        onViewNegativeStock={() => setCurrentView('NEGATIVE_STOCK')}
+                        onOrderSimulation={() => setIsOrderSimModalOpen(true)}
+                        onScan={handleGlobalScanClick}
+                        onCycleCount={() => setIsCycleCountOpen(true)}
+                        onReportSent={handleReportSent}
+                        currentUser={currentUser}
+                        isCloudEnabled={!!cloudConfig?.supabaseUrl}
+                        onOpenCloudSetup={() => setIsCloudSetupOpen(true)}
+                    />
+                )}
+                {currentView === 'ANALYTICS' && (
+                    <Analytics 
+                        products={products}
+                        transactions={transactions}
+                    />
+                )}
+                {currentView === 'INVENTORY' && (
+                    <InventoryList 
+                        products={products} 
+                        onDelete={handleDeleteProduct}
+                        onEdit={handleEditProductClick} 
+                        onAddProduct={handleAddProductClick}
+                        onBulkAdd={() => openBulkModal('PRODUCT')}
+                        onPrintBarcodes={() => setIsBarcodePrinterOpen(true)}
+                        currentUser={currentUser}
+                    />
+                )}
+                {currentView === 'HISTORY' && (
+                    <TransactionHistory 
+                        transactions={transactions} 
+                        onEdit={handleEditTransactionClick}
+                        onDelete={(id) => handleDeleteTransaction(id)}
+                        currentUser={currentUser}
+                    />
+                )}
+                {currentView === 'NEGATIVE_STOCK' && (
+                    <NegativeStockList 
+                        products={products}
+                        onBack={() => setCurrentView('DASHBOARD')}
+                    />
                 )}
             </div>
-
-            {currentView === 'DASHBOARD' && (
-                <Dashboard 
-                    products={products} 
-                    transactions={transactions} 
-                    onQuickAction={openQuickAction}
-                    onProductClick={(p) => setCurrentView('INVENTORY')}
-                    onBulkAction={() => openBulkModal('TRANSACTION')}
-                    onViewNegativeStock={() => setCurrentView('NEGATIVE_STOCK')}
-                    onOrderSimulation={() => setIsOrderSimModalOpen(true)}
-                    onScan={handleGlobalScanClick}
-                    onCycleCount={() => setIsCycleCountOpen(true)}
-                    onReportSent={handleReportSent}
-                    currentUser={currentUser}
-                    isCloudEnabled={!!cloudConfig?.supabaseUrl}
-                    onOpenCloudSetup={() => setIsCloudSetupOpen(true)}
-                />
-            )}
-            {currentView === 'ANALYTICS' && (
-                <Analytics 
-                    products={products}
-                    transactions={transactions}
-                />
-            )}
-            {currentView === 'INVENTORY' && (
-                <InventoryList 
-                    products={products} 
-                    onDelete={handleDeleteProduct}
-                    onEdit={handleEditProductClick} 
-                    onAddProduct={handleAddProductClick}
-                    onBulkAdd={() => openBulkModal('PRODUCT')}
-                    onPrintBarcodes={() => setIsBarcodePrinterOpen(true)}
-                    currentUser={currentUser}
-                />
-            )}
-            {currentView === 'HISTORY' && (
-                <TransactionHistory 
-                    transactions={transactions} 
-                    onEdit={handleEditTransactionClick}
-                    onDelete={(id) => handleDeleteTransaction(id)}
-                    currentUser={currentUser}
-                />
-            )}
-            {currentView === 'NEGATIVE_STOCK' && (
-                <NegativeStockList 
-                    products={products}
-                    onBack={() => setCurrentView('DASHBOARD')}
-                />
-            )}
-        </div>
+        </Suspense>
       </main>
 
       {/* MOBILE BOTTOM NAVIGATION */}
@@ -1127,11 +1115,13 @@ function App() {
         products={products}
       />
       
-      <BarcodePrinterModal
-        isOpen={isBarcodePrinterOpen}
-        onClose={() => setIsBarcodePrinterOpen(false)}
-        products={products}
-      />
+      <Suspense fallback={null}>
+          <BarcodePrinterModal
+            isOpen={isBarcodePrinterOpen}
+            onClose={() => setIsBarcodePrinterOpen(false)}
+            products={products}
+          />
+      </Suspense>
 
     </div>
   );
