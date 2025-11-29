@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { X, CheckCircle, AlertCircle, Search, AlertTriangle, RefreshCw, Trash2, ScanLine, Hash, Zap } from 'lucide-react';
 import { Product, Transaction, TransactionType } from '../types';
@@ -22,7 +21,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   
-  const [scanFeedback, setScanFeedback] = useState(''); 
+  const [foundProduct, setFoundProduct] = useState<Product | null>(null);
   const [showScanner, setShowScanner] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,31 +37,25 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       if (!isOpen) return;
 
       const handleKeyDown = (e: KeyboardEvent) => {
-          // Ignore if focused on quantity or description to allow typing numbers/text there
           const activeId = document.activeElement?.id;
           if (activeId === 'quantityInput' || activeId === 'descInput') {
               return;
           }
 
           const now = Date.now();
-          const isScannerInput = now - lastKeyTime.current < 50; // 50ms threshold implies scanner speed
+          const isScannerInput = now - lastKeyTime.current < 50;
           lastKeyTime.current = now;
 
           if (e.key === 'Enter') {
               if (barcodeBuffer.current.length > 0) {
-                  // Process the buffer
                   e.preventDefault();
                   processScannedCode(barcodeBuffer.current);
                   barcodeBuffer.current = '';
               }
           } else if (e.key.length === 1) {
-              // Only printable characters
               if (isScannerInput) {
-                  // Add to buffer if it's fast typing (scanner)
                   barcodeBuffer.current += e.key;
               } else {
-                  // Slow typing (human) - reset buffer usually, but here we can be lenient
-                  // For safety, clear buffer if too slow to prevent mixing manual and scan
                   if (now - lastKeyTime.current > 100) {
                       barcodeBuffer.current = ''; 
                   }
@@ -72,7 +65,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, products]); // Re-bind if products change
+  }, [isOpen, products]);
 
   useEffect(() => {
     if (isOpen && defaultBarcode) {
@@ -90,10 +83,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         
         const product = products.find(p => p.id === transactionToEdit.product_id);
         setSearchTerm(product?.part_code || product?.product_name || '');
+        setFoundProduct(product || null);
         
         setError('');
         setIsDropdownOpen(false);
-        setScanFeedback('');
       } else {
         setType(initialType);
         if (!defaultBarcode) {
@@ -103,7 +96,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             setError('');
             setSearchTerm('');
             setIsDropdownOpen(false);
-            setScanFeedback('');
+            setFoundProduct(null);
         }
       }
     }
@@ -121,41 +114,34 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
   const processScannedCode = (code: string) => {
       const cleanCode = code.trim();
+      setSearchTerm(cleanCode); // Arama kutusunda okunan kodu göster
       
-      // 1. Try to find by Short ID (Exact Match)
-      // Convert both to string to be safe
       let product = products.find(p => String(p.short_id).trim() === cleanCode);
-
-      // 2. If not found, try Barcode field
-      if (!product) {
-          product = products.find(p => p.barcode === cleanCode);
-      }
-
-      // 3. If not found, try Part Code
-      if (!product) {
-          product = products.find(p => p.part_code === cleanCode);
-      }
+      if (!product) product = products.find(p => p.barcode === cleanCode);
+      if (!product) product = products.find(p => p.part_code === cleanCode);
+      if (!product) product = products.find(p => p.location === cleanCode);
 
       if (product) {
-          handleProductSelect(product);
+          setProductId(product.id);
+          setFoundProduct(product); // Onay kutusu için ürünü ayarla
           setQuantity(1);
-          setScanFeedback(`✅ Barkod Eşleşti: ${product.part_code}`);
-          // Focus quantity
+          setIsDropdownOpen(false);
+          setError('');
           setTimeout(() => {
               document.getElementById('quantityInput')?.focus();
-              // Select all text in quantity for easy overwrite
               (document.getElementById('quantityInput') as HTMLInputElement)?.select();
           }, 100);
       } else {
-          setError(`Barkod bulunamadı: ${cleanCode}`);
-          setSearchTerm(cleanCode); // Show what was scanned so user knows
+          setProductId('');
+          setFoundProduct(null);
+          setError(`Kod bulunamadı: ${cleanCode}`);
       }
   };
 
   const handleProductSelect = (product: Product) => {
     setProductId(product.id);
-    // CRITICAL: Always show Part Code in the input, never the Short ID
     setSearchTerm(product.part_code || product.product_name);
+    setFoundProduct(product); // Manuel seçimde de onay göster
     setIsDropdownOpen(false);
     setError('');
   };
@@ -163,11 +149,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchTerm(val);
-    setScanFeedback('');
+    setFoundProduct(null); // Manuel yazarken onayı temizle
+    setProductId(''); // Seçimi temizle
     
-    // Clear selection if user clears input
     if (val === '') {
-        setProductId('');
         setQuantity('');
     }
 
@@ -182,7 +167,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!productId) {
-      setError('Lütfen listeden geçerli bir parça kodu seçin.');
+      setError('Lütfen listeden geçerli bir parça seçin veya barkod okutun.');
       return;
     }
     if (!quantity || Number(quantity) <= 0) {
@@ -294,15 +279,18 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                 </button>
               </div>
               
-              {/* Scan Feedback Message */}
-              {scanFeedback && (
-                  <div className="mt-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 animate-fade-in flex items-center gap-1">
-                      {scanFeedback}
+              {/* Scan/Selection Confirmation Box */}
+              {foundProduct && (
+                  <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm rounded-lg flex items-center gap-2 font-medium animate-fade-in">
+                      <CheckCircle size={16} />
+                      <span>
+                        <span className="font-bold">{foundProduct.part_code}:</span> {foundProduct.product_name}
+                      </span>
                   </div>
               )}
 
               {/* Dropdown List */}
-              {isDropdownOpen && searchTerm.length > 0 && (
+              {isDropdownOpen && searchTerm.length > 0 && !foundProduct && (
                 <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg max-h-60 overflow-y-auto">
                   {filteredProducts.length === 0 ? (
                     <div className="p-3 text-sm text-slate-500 dark:text-slate-400 text-center">Sonuç yok.</div>
