@@ -24,7 +24,7 @@ import { Product, Transaction, TransactionType, ViewState, User, CloudConfig } f
 const generateId = () => Math.random().toString(36).substring(2, 11);
 const generateShortId = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.4.2";
 
 function App() {
   // --- AUTH STATE ---
@@ -121,7 +121,7 @@ function App() {
       const productsMissingShortId = products.some(p => !p.short_id);
       
       if (productsMissingShortId) {
-          console.log("Migrating products to include short_id...");
+          console.log("Migrating products to include persistent short_id...");
           const updatedProducts = products.map(p => {
               if (!p.short_id) {
                   return { ...p, short_id: generateShortId() };
@@ -129,17 +129,8 @@ function App() {
               return p;
           });
           
-          // Update state and save local
-          setProducts(updatedProducts);
-          localStorage.setItem('depopro_products', JSON.stringify(updatedProducts));
-          
-          // Trigger cloud save ONLY if we are connected
-          // We use a timeout to avoid immediate re-render loops or race conditions with load
-          if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
-              setTimeout(() => {
-                  performCloudSave(updatedProducts, transactions);
-              }, 2000);
-          }
+          // Use CENTRALIZED save to ensure it goes to cloud immediately
+          saveData(updatedProducts, transactions);
       }
   }, [products.length, cloudConfig]); // Length değişimi veya config değişimi tetiklesin
 
