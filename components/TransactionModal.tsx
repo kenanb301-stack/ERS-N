@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, CheckCircle, AlertCircle, Search, AlertTriangle, RefreshCw, Trash2, ScanLine, Hash, Zap } from 'lucide-react';
+
+import React, { useState, useEffect, useRef, useDeferredValue } from 'react';
+import { X, CheckCircle, AlertCircle, Search, AlertTriangle, RefreshCw, Trash2, ScanLine, Hash, Zap, Barcode } from 'lucide-react';
 import { Product, Transaction, TransactionType } from '../types';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -24,7 +25,13 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const [foundProduct, setFoundProduct] = useState<Product | null>(null);
   const [showScanner, setShowScanner] = useState(false);
 
-  const [searchTerm, setSearchTerm] = useState('');
+  // --- NEW: DUAL FIELDS STATE ---
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [partCodeInput, setPartCodeInput] = useState('');
+  
+  // Performans için arama terimini geciktir
+  const deferredPartCodeInput = useDeferredValue(partCodeInput);
+
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
@@ -82,25 +89,34 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         setDescription(transactionToEdit.description);
         
         const product = products.find(p => p.id === transactionToEdit.product_id);
-        setSearchTerm(product?.part_code || product?.product_name || '');
-        setFoundProduct(product || null);
+        if (product) {
+            setProductId(product.id);
+            setFoundProduct(product);
+            setPartCodeInput(product.part_code || product.product_name || '');
+            setBarcodeInput(product.short_id || product.barcode || '');
+        }
         
         setError('');
         setIsDropdownOpen(false);
       } else {
         setType(initialType);
         if (!defaultBarcode) {
-            setProductId('');
-            setQuantity('');
-            setDescription('');
-            setError('');
-            setSearchTerm('');
-            setIsDropdownOpen(false);
-            setFoundProduct(null);
+            resetForm();
         }
       }
     }
   }, [isOpen, initialType, transactionToEdit, products]);
+
+  const resetForm = () => {
+      setProductId('');
+      setQuantity('');
+      setDescription('');
+      setError('');
+      setBarcodeInput('');
+      setPartCodeInput('');
+      setIsDropdownOpen(false);
+      setFoundProduct(null);
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -114,49 +130,74 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
   const processScannedCode = (code: string) => {
       const cleanCode = code.trim();
-      setSearchTerm(cleanCode); // Arama kutusunda okunan kodu göster
+      setBarcodeInput(cleanCode); // Barkod alanına yaz
       
+      // Ürünü bul
       let product = products.find(p => String(p.short_id).trim() === cleanCode);
       if (!product) product = products.find(p => p.barcode === cleanCode);
       if (!product) product = products.find(p => p.part_code === cleanCode);
       if (!product) product = products.find(p => p.location === cleanCode);
 
       if (product) {
-          setProductId(product.id);
-          setFoundProduct(product); // Onay kutusu için ürünü ayarla
-          setQuantity(1);
-          setIsDropdownOpen(false);
-          setError('');
-          setTimeout(() => {
-              document.getElementById('quantityInput')?.focus();
-              (document.getElementById('quantityInput') as HTMLInputElement)?.select();
-          }, 100);
+          selectProduct(product);
       } else {
+          // Bulunamadıysa sadece barkod alanı dolu kalsın, diğerlerini temizle
           setProductId('');
           setFoundProduct(null);
+          setPartCodeInput('');
           setError(`Kod bulunamadı: ${cleanCode}`);
       }
   };
 
-  const handleProductSelect = (product: Product) => {
+  const selectProduct = (product: Product) => {
     setProductId(product.id);
-    setSearchTerm(product.part_code || product.product_name);
-    setFoundProduct(product); // Manuel seçimde de onay göster
+    setFoundProduct(product);
+    
+    // Fill Fields
+    setPartCodeInput(product.part_code || product.product_name);
+    setBarcodeInput(product.short_id || product.barcode || '');
+    
     setIsDropdownOpen(false);
     setError('');
+    
+    // Focus quantity
+    setTimeout(() => {
+        document.getElementById('quantityInput')?.focus();
+        (document.getElementById('quantityInput') as HTMLInputElement)?.select();
+    }, 100);
   };
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setSearchTerm(val);
-    setFoundProduct(null); // Manuel yazarken onayı temizle
-    setProductId(''); // Seçimi temizle
-    
-    if (val === '') {
-        setQuantity('');
-    }
+  // Barkod Elle Girilirse
+  const handleBarcodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setBarcodeInput(val);
 
-    setIsDropdownOpen(true);
+      if (val.length >= 1) {
+          const product = products.find(p => String(p.short_id) === val);
+          if (product) {
+              selectProduct(product);
+          } else {
+              // Eşleşme bozulursa seçimi kaldır
+              setProductId('');
+              setFoundProduct(null);
+              setPartCodeInput('');
+          }
+      } else {
+          resetForm();
+      }
+  };
+
+  // Parça Kodu Elle Girilirse (Arama)
+  const handlePartCodeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setPartCodeInput(val);
+      setIsDropdownOpen(true);
+
+      if (val === '') {
+          setBarcodeInput('');
+          setProductId('');
+          setFoundProduct(null);
+      }
   };
 
   const handleScanSuccess = (decodedText: string) => {
@@ -188,10 +229,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const selectedProduct = products.find(p => p.id === productId);
   const willBeNegative = !transactionToEdit && type === TransactionType.OUT && selectedProduct && quantity && (selectedProduct.current_stock - Number(quantity) < 0);
 
+  // Filter products based on Part Code Input
   const filteredProducts = products.filter(p => 
-    (p.part_code && p.part_code.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (p.location && p.location.toLowerCase().includes(searchTerm.toLowerCase()))
+    (p.part_code && p.part_code.toLowerCase().includes(deferredPartCodeInput.toLowerCase())) ||
+    p.product_name.toLowerCase().includes(deferredPartCodeInput.toLowerCase()) || 
+    (p.location && p.location.toLowerCase().includes(deferredPartCodeInput.toLowerCase()))
   );
 
   return (
@@ -248,81 +290,98 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
               </button>
             </div>
 
-            {/* PRODUCT INPUT */}
-            <div className="relative" ref={dropdownRef}>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Parça Kodu / Barkod</label>
-              <div className="relative flex gap-2">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={handleSearchChange}
-                        onFocus={() => setIsDropdownOpen(true)}
-                        placeholder="Barkod okutunuz..."
-                        autoFocus={!defaultBarcode && !transactionToEdit}
-                        className={`w-full pl-10 pr-10 py-3 rounded-lg border outline-none transition-all font-mono font-bold text-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
-                    />
-                    {productId && (
-                        <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600 dark:text-green-400" size={18} />
-                    )}
-                    {!productId && (
-                        <Zap className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
-                    )}
+            {/* --- DUAL INPUT SYSTEM --- */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" ref={dropdownRef}>
+                
+                {/* 1. Barkod Kodu Alanı */}
+                <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Barkod Kodu (6 Hane)</label>
+                    <div className="relative">
+                        <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input
+                            type="text"
+                            value={barcodeInput}
+                            onChange={handleBarcodeInput}
+                            placeholder="Okutunuz..."
+                            autoFocus={!defaultBarcode && !transactionToEdit}
+                            className={`w-full pl-9 pr-2 py-3 rounded-lg border outline-none transition-all font-mono font-bold text-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
+                        />
+                    </div>
                 </div>
-                <button 
-                    type="button" 
-                    onClick={() => setShowScanner(true)}
-                    className="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 transition-transform"
-                >
-                    <ScanLine size={20} />
-                </button>
-              </div>
-              
-              {/* Scan/Selection Confirmation Box */}
-              {foundProduct && (
-                  <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-sm rounded-lg flex items-center gap-2 font-medium animate-fade-in">
-                      <CheckCircle size={16} />
-                      <span>
-                        <span className="font-bold">{foundProduct.part_code}:</span> {foundProduct.product_name}
-                      </span>
-                  </div>
-              )}
 
-              {/* Dropdown List */}
-              {isDropdownOpen && searchTerm.length > 0 && !foundProduct && (
-                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg max-h-60 overflow-y-auto">
-                  {filteredProducts.length === 0 ? (
-                    <div className="p-3 text-sm text-slate-500 dark:text-slate-400 text-center">Sonuç yok.</div>
-                  ) : (
-                    filteredProducts.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleProductSelect(p)}
-                        className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-600 border-b border-slate-50 dark:border-slate-600 last:border-0 transition-colors flex justify-between items-center group"
-                      >
-                        <div className="flex items-center gap-3">
-                             <div className="flex flex-col">
-                                <span className="font-bold font-mono text-slate-800 dark:text-white text-lg group-hover:text-primary dark:group-hover:text-blue-400">
-                                    {p.part_code || 'KODSUZ'}
-                                </span>
-                                <span className="text-xs text-slate-400 dark:text-slate-500">
-                                    {p.product_name}
-                                </span>
-                             </div>
+                {/* 2. Parça Kodu Alanı (Dropdown) */}
+                <div className="relative">
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Parça Kodu / Ara</label>
+                    <div className="relative flex gap-2">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input
+                                type="text"
+                                value={partCodeInput}
+                                onChange={handlePartCodeInput}
+                                onFocus={() => setIsDropdownOpen(true)}
+                                placeholder="Parça Kodu..."
+                                className={`w-full pl-9 pr-8 py-3 rounded-lg border outline-none transition-all font-bold text-sm bg-white dark:bg-slate-700 text-slate-800 dark:text-white ${productId ? 'border-green-500 bg-green-50 dark:bg-green-900/10 dark:border-green-600' : 'border-slate-200 dark:border-slate-600 focus:border-primary focus:ring-2 focus:ring-primary/20'}`}
+                            />
+                            {productId && (
+                                <CheckCircle className="absolute right-2 top-1/2 -translate-y-1/2 text-green-600 dark:text-green-400" size={16} />
+                            )}
                         </div>
-                        <div className="text-right">
-                             <div className={`text-xs font-bold px-2 py-1 rounded ${p.current_stock <= p.min_stock_level ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
-                                {p.current_stock} {p.unit}
-                            </div>
+                        <button 
+                            type="button" 
+                            onClick={() => setShowScanner(true)}
+                            className="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:scale-95 transition-transform"
+                        >
+                            <ScanLine size={20} />
+                        </button>
+                    </div>
+
+                    {/* Dropdown List */}
+                    {isDropdownOpen && partCodeInput.length > 0 && !foundProduct && (
+                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl shadow-lg max-h-60 overflow-y-auto right-0 min-w-[250px]">
+                        {filteredProducts.length === 0 ? (
+                            <div className="p-3 text-sm text-slate-500 dark:text-slate-400 text-center">Sonuç yok.</div>
+                        ) : (
+                            filteredProducts.map(p => (
+                            <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => selectProduct(p)}
+                                className="w-full text-left p-3 hover:bg-slate-50 dark:hover:bg-slate-600 border-b border-slate-50 dark:border-slate-600 last:border-0 transition-colors flex justify-between items-center group"
+                            >
+                                <div>
+                                    <span className="font-bold font-mono text-slate-800 dark:text-white text-sm group-hover:text-primary dark:group-hover:text-blue-400 block">
+                                        {p.part_code || 'KODSUZ'}
+                                    </span>
+                                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                                        {p.product_name}
+                                    </span>
+                                </div>
+                                <div className={`text-xs font-bold px-2 py-1 rounded ${p.current_stock <= p.min_stock_level ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                                    {p.current_stock}
+                                </div>
+                            </button>
+                            ))
+                        )}
                         </div>
-                      </button>
-                    ))
-                  )}
+                    )}
                 </div>
-              )}
             </div>
+            
+            {/* Found Product Info (Yeşil Kutu) */}
+            {foundProduct && (
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 text-sm rounded-lg flex items-center gap-2 border border-green-200 dark:border-green-800 animate-fade-in">
+                    <CheckCircle size={18} className="flex-shrink-0" />
+                    <div>
+                        <div className="font-bold">{foundProduct.product_name}</div>
+                        <div className="text-xs opacity-80 flex gap-2">
+                            <span>Stok: {foundProduct.current_stock} {foundProduct.unit}</span>
+                            <span>|</span>
+                            <span>Reyon: {foundProduct.location}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Miktar</label>
