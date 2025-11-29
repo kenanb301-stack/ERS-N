@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, Package, Edit, Trash2, Plus, FileSpreadsheet, Check, X, Printer, MapPin, Hexagon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Product, User } from '../types';
 
@@ -19,6 +19,41 @@ const InventoryList: React.FC<InventoryListProps> = ({ products, onDelete, onEdi
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // SCAN BUFFER
+  const lastKeyTime = useRef<number>(0);
+  const barcodeBuffer = useRef<string>('');
+
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          // If searching input is focused, let normal behavior handle it
+          if (document.activeElement?.tagName === 'INPUT') return;
+
+          const now = Date.now();
+          const isScannerInput = now - lastKeyTime.current < 50;
+          lastKeyTime.current = now;
+
+          if (e.key === 'Enter') {
+              if (barcodeBuffer.current.length > 0) {
+                  // Resolve Short ID
+                  const code = barcodeBuffer.current.trim();
+                  const product = products.find(p => String(p.short_id).trim() === code);
+                  
+                  if (product) {
+                      setSearchTerm(product.part_code || '');
+                  } else {
+                      setSearchTerm(code);
+                  }
+                  barcodeBuffer.current = '';
+              }
+          } else if (e.key.length === 1 && isScannerInput) {
+              barcodeBuffer.current += e.key;
+          }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {

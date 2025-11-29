@@ -42,7 +42,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         
         validProducts.forEach(product => {
             try {
-                // FORCE USE SHORT_ID for the barcode bars (Compact & Reliable)
+                // ALWAYS USE SHORT_ID
                 const codeToUse = product.short_id || Math.floor(100000 + Math.random() * 900000).toString();
 
                 if (codeToUse) {
@@ -170,7 +170,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
                 <Printer size={24} className="text-blue-600 dark:text-blue-400" />
                 Barkod Yazdır
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Etiket: 56mm x 40mm | Kaynak: Süper Kısa Kod</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Etiket: 56mm x 40mm | Otomatik Kısa Kod</p>
           </div>
           <button onClick={onClose} className="p-2 bg-white dark:bg-slate-700 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors shadow-sm">
             <X size={20} />
@@ -181,7 +181,7 @@ const BarcodePrinterModal: React.FC<BarcodePrinterModalProps> = ({ isOpen, onClo
         <div className="p-3 bg-emerald-50 dark:bg-emerald-900/10 border-b border-emerald-100 dark:border-emerald-800 flex items-center justify-between text-sm">
              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
                  <ShieldCheck size={16} /> 
-                 <span>Otomatik Dönüşüm: Barkod okutulduğunda sistem otomatik olarak Parça Kodunu bulur.</span>
+                 <span>Sistem, bu kısa barkodları okuduğunda otomatik olarak Parça Koduna çevirir.</span>
              </div>
         </div>
 
