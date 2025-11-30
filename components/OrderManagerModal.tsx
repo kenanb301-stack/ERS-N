@@ -1,8 +1,9 @@
 
-import React, { useState, useRef, useMemo } from 'react';
-import { X, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, Order, OrderItem } from '../types';
+import BarcodeScanner from './BarcodeScanner';
 
 interface OrderManagerModalProps {
   isOpen: boolean;
@@ -22,6 +23,18 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
   const [newOrderName, setNewOrderName] = useState('');
   const [importedItems, setImportedItems] = useState<OrderItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Scan Picking State
+  const [showScanner, setShowScanner] = useState(false);
+  const [pickedCounts, setPickedCounts] = useState<Record<string, number>>({});
+  const [scanMessage, setScanMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
+
+  useEffect(() => {
+      if (!isOpen) {
+          setPickedCounts({});
+          setScanMessage(null);
+      }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -84,7 +97,63 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
       return { missingCount, details };
   };
 
+  // SCAN LOGIC
+  const handleScan = (code: string) => {
+      if (!activeOrder) return;
+      
+      const cleanCode = code.trim();
+      // Find system product
+      const product = products.find(p => 
+          p.short_id === cleanCode || p.barcode === cleanCode || p.part_code === cleanCode
+      );
+
+      if (!product) {
+          setScanMessage({ type: 'error', text: `Tanımsız Ürün: ${cleanCode}` });
+          // Play Error Sound
+          return;
+      }
+
+      // Check if product is in order
+      // Using flexible matching
+      const orderItem = activeOrder.items.find(item => 
+          item.product_name.toLowerCase().trim() === product.product_name.toLowerCase().trim() ||
+          item.product_name.toLowerCase().trim() === (product.part_code || '').toLowerCase().trim()
+      );
+
+      if (orderItem) {
+          // Found!
+          setPickedCounts(prev => {
+              const current = prev[orderItem.product_name] || 0;
+              if (current >= orderItem.required_qty) {
+                  setScanMessage({ type: 'success', text: `Bu ürün zaten tamamlandı: ${product.product_name}` });
+                  return prev;
+              }
+              setScanMessage({ type: 'success', text: `Eklendi: ${product.product_name} (${product.part_code})` });
+              return { ...prev, [orderItem.product_name]: current + 1 };
+          });
+      } else {
+          setScanMessage({ type: 'error', text: `Siparişte YOK: ${product.product_name}` });
+      }
+  };
+
   return (
+    <>
+    {showScanner && (
+        <div className="fixed inset-0 z-[110]">
+            <BarcodeScanner 
+                onScanSuccess={handleScan} 
+                onClose={() => setShowScanner(false)} 
+            />
+            {/* Overlay Message on Scanner */}
+            {scanMessage && (
+                <div className={`absolute bottom-20 left-4 right-4 p-4 rounded-xl shadow-lg z-[120] text-center font-bold animate-bounce ${scanMessage.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-600 text-white'}`}>
+                    {scanMessage.type === 'success' ? <CheckCircle className="inline mr-2"/> : <AlertTriangle className="inline mr-2"/>}
+                    {scanMessage.text}
+                </div>
+            )}
+        </div>
+    )}
+
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden transition-colors">
         
@@ -111,7 +180,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                         {orders.map(order => {
                             const { missingCount } = calculateShortages(order.items);
                             return (
-                                <div key={order.id} onClick={() => { setActiveOrder(order); setView('DETAIL'); }} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-orange-400 cursor-pointer transition-all group">
+                                <div key={order.id} onClick={() => { setActiveOrder(order); setView('DETAIL'); setPickedCounts({}); }} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-orange-400 cursor-pointer transition-all group">
                                     <div className="flex justify-between items-center">
                                         <div>
                                             <h4 className="font-bold text-slate-800 dark:text-white">{order.name}</h4>
@@ -169,42 +238,68 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
 
             {view === 'DETAIL' && activeOrder && (
                 <div className="space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <button onClick={() => setView('LIST')} className="text-sm font-bold text-slate-500 hover:text-slate-800 self-start">← Listeye Dön</button>
-                        <div className="flex gap-2 self-end">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-4 rounded-xl border dark:border-slate-700">
+                        <div>
+                            <button onClick={() => setView('LIST')} className="text-xs font-bold text-slate-500 hover:text-slate-800 mb-1">← Listeye Dön</button>
+                            <h3 className="font-bold text-lg dark:text-white">{activeOrder.name}</h3>
+                        </div>
+                        <div className="flex gap-2 self-end sm:self-auto">
+                            <button 
+                                onClick={() => setShowScanner(true)}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none animate-pulse"
+                            >
+                                <ScanLine size={18} /> Toplama Modu (Barkod)
+                            </button>
+                            
                             {activeOrder.status !== 'COMPLETED' && (
-                                <button onClick={() => { onUpdateOrderStatus(activeOrder.id, 'COMPLETED'); setView('LIST'); }} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold flex items-center gap-2"><Archive size={16}/> <span className="hidden sm:inline">Arşivle / Tamamla</span></button>
+                                <button onClick={() => { onUpdateOrderStatus(activeOrder.id, 'COMPLETED'); setView('LIST'); }} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold flex items-center gap-2"><Archive size={16}/> <span className="hidden sm:inline">Tamamla</span></button>
                             )}
-                            <button onClick={() => { if(confirm("Silinsin mi?")) { onDeleteOrder(activeOrder.id); setView('LIST'); } }} className="px-4 py-2 bg-red-100 text-red-600 rounded-lg text-sm font-bold"><Trash2 size={16}/></button>
+                            <button onClick={() => { if(confirm("Silinsin mi?")) { onDeleteOrder(activeOrder.id); setView('LIST'); } }} className="px-3 py-2 bg-red-100 text-red-600 rounded-lg"><Trash2 size={18}/></button>
                         </div>
                     </div>
 
                     <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700">
-                            <h3 className="font-bold text-lg dark:text-white">{activeOrder.name}</h3>
-                            <p className="text-xs text-slate-500">Oluşturulma: {new Date(activeOrder.created_at).toLocaleString()}</p>
-                        </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
+                                <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-medium">
+                                    <tr>
+                                        <th className="p-3 text-left">Ürün</th>
+                                        <th className="p-3 text-center">İstenen</th>
+                                        <th className="p-3 text-center">Toplanan</th>
+                                        <th className="p-3 text-center">Stok Durumu</th>
+                                    </tr>
+                                </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                    {calculateShortages(activeOrder.items).details.map((item, idx) => (
-                                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                            <td className="p-4">
-                                                <div className="font-bold text-slate-800 dark:text-white">{item.product_name}</div>
-                                                <div className="text-xs text-slate-500 flex gap-2">
-                                                    {item.match ? <span className="text-green-600 flex items-center gap-1"><CheckCircle size={10}/> Eşleşti: {item.match.part_code}</span> : <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10}/> Eşleşmedi</span>}
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-right">
-                                                <div className="text-sm font-medium text-slate-600 dark:text-slate-300">İstenen: {item.required_qty}</div>
-                                                {item.missing > 0 ? (
-                                                    <div className="text-red-600 font-bold text-sm">Eksik: {item.missing}</div>
-                                                ) : (
-                                                    <div className="text-green-600 font-bold text-xs">Stok Var</div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {calculateShortages(activeOrder.items).details.map((item, idx) => {
+                                        const picked = pickedCounts[item.product_name] || 0;
+                                        const isFullyPicked = picked >= item.required_qty;
+                                        return (
+                                            <tr key={idx} className={`transition-colors ${isFullyPicked ? 'bg-green-50 dark:bg-green-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
+                                                <td className="p-4">
+                                                    <div className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                                        {item.product_name}
+                                                        {isFullyPicked && <CheckCircle size={14} className="text-green-600" />}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 flex gap-2">
+                                                        {item.match ? <span className="text-green-600 flex items-center gap-1">Kod: {item.match.part_code}</span> : <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10}/> Eşleşmedi</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-center font-bold text-slate-700 dark:text-slate-300">{item.required_qty}</td>
+                                                <td className="p-4 text-center">
+                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${picked > 0 ? (isFullyPicked ? 'bg-green-200 text-green-800' : 'bg-blue-100 text-blue-700') : 'bg-slate-100 text-slate-400'}`}>
+                                                        {picked}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {item.missing > 0 ? (
+                                                        <div className="text-red-600 font-bold text-xs bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded inline-block">-{item.missing} Eksik</div>
+                                                    ) : (
+                                                        <div className="text-green-600 font-bold text-xs flex items-center justify-center gap-1"><CheckCircle size={10}/> Stok Var</div>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -215,6 +310,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
         </div>
       </div>
     </div>
+    </>
   );
 };
 
