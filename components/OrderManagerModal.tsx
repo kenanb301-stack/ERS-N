@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, Order, OrderItem } from '../types';
 import BarcodeScanner from './BarcodeScanner';
@@ -40,26 +40,55 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
 
   // --- HANDLERS ---
 
+  const handleDownloadTemplate = () => {
+    const data = [
+      { "Parça Kodu": "P-001", "Ürün Adı": "Örnek Parça", "Miktar": 10, "Birim": "Adet", "Grubu": "Ön Montaj", "Reyon": "A1" },
+      { "Parça Kodu": "H-202", "Ürün Adı": "Hidrolik", "Miktar": 5, "Birim": "Adet", "Grubu": "Hidrolik", "Reyon": "B2" }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SiparisSablonu");
+    XLSX.writeFile(wb, "siparis_yukleme_sablonu.xlsx");
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json(ws);
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws);
 
-      const items: OrderItem[] = [];
-      data.forEach((row: any) => {
-          const name = row['Urun'] || row['Ürün'] || row['Aciklama'];
-          const qty = row['Adet'] || row['Miktar'] || row['Qty'];
-          if (name && qty) {
-              items.push({ product_name: name, required_qty: Number(qty), unit: row['Birim'] || 'Adet' });
-          }
-      });
-      setImportedItems(items);
+        const items: OrderItem[] = [];
+        data.forEach((row: any) => {
+            const name = row['Urun'] || row['Ürün'] || row['Aciklama'] || row['Ürün Adı'];
+            const qty = row['Adet'] || row['Miktar'] || row['Qty'];
+            
+            // New Fields
+            const partCode = row['ParcaKodu'] || row['Parça Kodu'] || row['PartCode'];
+            const group = row['Grubu'] || row['Grup'] || row['Group'];
+            const location = row['Reyon'] || row['Raf'] || row['Location'];
+
+            if (qty) {
+                items.push({ 
+                    product_name: name || partCode || "Bilinmeyen Ürün", 
+                    required_qty: Number(qty), 
+                    unit: row['Birim'] || 'Adet',
+                    part_code: partCode ? String(partCode) : undefined,
+                    group: group ? String(group) : undefined,
+                    location: location ? String(location) : undefined
+                });
+            }
+        });
+        setImportedItems(items);
+      } catch (e) {
+          alert("Excel okuma hatası!");
+      }
     };
     reader.readAsBinaryString(file);
   };
@@ -83,7 +112,9 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
       let missingCount = 0;
       const details = items.map(item => {
           // Normalize names for better matching
+          // Try to match by Part Code FIRST, then by Name
           const match = products.find(p => 
+              (item.part_code && p.part_code?.toLowerCase().trim() === item.part_code.toLowerCase().trim()) ||
               p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim() || 
               p.part_code?.toLowerCase().trim() === item.product_name.toLowerCase().trim()
           );
@@ -114,10 +145,10 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
       }
 
       // Check if product is in order
-      // Using flexible matching
+      // Using flexible matching (Part Code match is prioritized)
       const orderItem = activeOrder.items.find(item => 
-          item.product_name.toLowerCase().trim() === product.product_name.toLowerCase().trim() ||
-          item.product_name.toLowerCase().trim() === (product.part_code || '').toLowerCase().trim()
+          (item.part_code && item.part_code.toLowerCase().trim() === (product.part_code || '').toLowerCase().trim()) ||
+          item.product_name.toLowerCase().trim() === product.product_name.toLowerCase().trim()
       );
 
       if (orderItem) {
@@ -220,6 +251,13 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                                 placeholder="Örn: Proje A - Malzeme Listesi"
                             />
                         </div>
+                        
+                        <div className="flex justify-center">
+                             <button onClick={handleDownloadTemplate} className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                                 <Download size={14} /> Şablonu İndir
+                             </button>
+                        </div>
+
                         <div 
                             onClick={() => fileInputRef.current?.click()}
                             className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
@@ -263,7 +301,8 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-medium">
                                     <tr>
-                                        <th className="p-3 text-left">Ürün</th>
+                                        <th className="p-3 text-left">Parça / Ürün</th>
+                                        <th className="p-3 text-left">Grup / Reyon</th>
                                         <th className="p-3 text-center">İstenen</th>
                                         <th className="p-3 text-center">Toplanan</th>
                                         <th className="p-3 text-center">Stok Durumu</th>
@@ -280,9 +319,14 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                                                         {item.product_name}
                                                         {isFullyPicked && <CheckCircle size={14} className="text-green-600" />}
                                                     </div>
-                                                    <div className="text-xs text-slate-500 flex gap-2">
-                                                        {item.match ? <span className="text-green-600 flex items-center gap-1">Kod: {item.match.part_code}</span> : <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10}/> Eşleşmedi</span>}
+                                                    <div className="text-xs text-slate-500 flex flex-col gap-0.5">
+                                                        {item.part_code && <span className="font-mono">Kod: {item.part_code}</span>}
+                                                        {item.match ? <span className="text-green-600 flex items-center gap-1">Sistemde Eşleşti</span> : <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10}/> Eşleşmedi</span>}
                                                     </div>
+                                                </td>
+                                                <td className="p-4">
+                                                    {item.group && <div className="text-xs font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded inline-block mb-1">{item.group}</div>}
+                                                    {item.location && <div className="text-xs font-mono text-orange-600 dark:text-orange-400 flex items-center gap-1"><ScanLine size={10}/> {item.location}</div>}
                                                 </td>
                                                 <td className="p-4 text-center font-bold text-slate-700 dark:text-slate-300">{item.required_qty}</td>
                                                 <td className="p-4 text-center">

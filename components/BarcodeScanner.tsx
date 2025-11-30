@@ -31,6 +31,19 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
     }
   };
 
+  const handleClose = async () => {
+      try {
+          if (scannerRef.current && scannerRef.current.isScanning) {
+              await scannerRef.current.stop();
+              scannerRef.current.clear();
+          }
+      } catch (e) {
+          console.warn("Safe close error:", e);
+      } finally {
+          onClose();
+      }
+  };
+
   useEffect(() => {
     mountedRef.current = true;
     isScanningRef.current = false;
@@ -132,9 +145,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
         
         // Yetenek Kontrolü (Flash / Zoom)
         try {
-            const track = html5QrCode.getRunningTrackCameraCapabilities();
             // TypeScript Hatası Düzeltmesi: 'as any' kullanımı
-            const capabilities = html5QrCode.getRunningTrackCapabilities() as any;
+            const capabilities = html5QrCode.getRunningTrackCameraCapabilities() as any;
             
             if (capabilities) {
                 if ('torch' in capabilities) setHasTorch(true);
@@ -217,7 +229,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
                 </button>
             )}
             <button 
-                onClick={() => onClose()}
+                onClick={handleClose}
                 className="p-2 bg-white/20 backdrop-blur-md rounded-full text-white hover:bg-white/30 transition-colors"
             >
                 <X size={24} />
@@ -245,7 +257,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanFa
                      <button onClick={handleRetry} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
                         <RefreshCw size={18} /> Sayfayı Yenile
                     </button>
-                    <button onClick={onClose} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
+                    <button onClick={handleClose} className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors">
                         Kapat
                     </button>
                 </div>

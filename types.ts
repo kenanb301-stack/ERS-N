@@ -41,6 +41,9 @@ export interface OrderItem {
   required_qty: number;
   unit?: string;
   matched_product_id?: string; // Sistemdeki eşleşen ürün ID'si
+  part_code?: string; // Excel'den gelen Parça Kodu
+  group?: string;     // Excel'den gelen Grup (Montaj Grubu vb.)
+  location?: string;  // Excel'den gelen Reyon
 }
 
 export interface Order {
