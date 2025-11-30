@@ -155,7 +155,7 @@ function App() {
       let productChanged = false;
       const newProduct = { ...p };
       if (!newProduct.short_id) {
-        let newId;
+        let newId: string; // FIX: Explicit type
         do { newId = generateShortId(); } while (existingShortIds.has(newId));
         existingShortIds.add(newId);
         newProduct.short_id = newId;
@@ -619,7 +619,7 @@ function App() {
                         saveData(updated, transactions, orders);
                     } else {
                         const newId = `p-${generateId()}`;
-                        let shortId;
+                        let shortId: string; // FIX: Explicit type
                         do { shortId = generateShortId(); } while (products.some(p => p.short_id === shortId));
                         
                         const newProduct = { ...data, id: newId, short_id: shortId, barcode: shortId, created_at: new Date().toISOString() };
@@ -667,7 +667,7 @@ function App() {
                 }}
                 onProcessProducts={(newProds) => {
                     const processedProds = newProds.map(p => {
-                        let shortId;
+                        let shortId: string; // FIX: Explicit type
                         do { shortId = generateShortId(); } while (products.some(prod => prod.short_id === shortId));
                         return { 
                             ...p, 
