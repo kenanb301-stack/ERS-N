@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download, CheckCircle, AlertTriangle, Play, SkipForward, ArrowRight, MapPin, Hash } from 'lucide-react';
+import { X, Upload, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download, CheckCircle, AlertTriangle, Play, SkipForward, MapPin, Hash, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, Order, OrderItem } from '../types';
 import BarcodeScanner from './BarcodeScanner';
@@ -45,7 +45,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
 
   if (!isOpen) return null;
 
-  // --- AUDIO FEEDBACK ---
   const playSound = (type: 'success' | 'error') => {
       try {
           const src = type === 'success' 
@@ -55,13 +54,10 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
       } catch (e) {}
   };
 
-  // --- HANDLERS ---
-
   const handleDownloadTemplate = () => {
     const data = [
       { "Parça Kodu": "P-00003", "Miktar": 10, "Grup": "Ön Montaj" },
-      { "Parça Kodu": "H-20402", "Miktar": 5, "Grup": "Hidrolik" },
-      { "Parça Kodu": "C-1240", "Miktar": 100, "Grup": "Hırdavat" }
+      { "Parça Kodu": "H-20402", "Miktar": 5, "Grup": "Hidrolik" }
     ];
 
     const ws = XLSX.utils.json_to_sheet(data);
@@ -76,7 +72,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
 
     const reader = new FileReader();
     
-    // UPDATED: Use ArrayBuffer for robust reading of .xlsx files
+    // SAFE READ: ArrayBuffer
     reader.onload = (evt) => {
       try {
         const arrayBuffer = evt.target?.result;
@@ -97,22 +93,33 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
 
         const items: OrderItem[] = [];
         
-        // Process large datasets without freezing
         data.forEach((row: any) => {
-            const partCodeRaw = row['ParcaKodu'] || row['Parça Kodu'] || row['PartCode'] || row['Kod'];
-            const qtyRaw = row['Adet'] || row['Miktar'] || row['Qty'];
-            const nameRaw = row['Urun'] || row['Ürün'] || row['Aciklama'] || row['Ürün Adı'];
-            const groupRaw = row['Grubu'] || row['Grup'] || row['Group'];
+            // Flexible Header Reading
+            const getVal = (keys: string[]) => {
+                for (const k of keys) {
+                    if (row[k] !== undefined) return row[k];
+                    // Case insensitive check
+                    const keyLower = k.toLowerCase();
+                    const foundKey = Object.keys(row).find(rk => rk.toLowerCase().trim() === keyLower);
+                    if (foundKey) return row[foundKey];
+                }
+                return undefined;
+            };
+
+            const partCodeRaw = getVal(['ParcaKodu', 'Parça Kodu', 'PartCode', 'Kod']);
+            const qtyRaw = getVal(['Adet', 'Miktar', 'Qty']);
+            const nameRaw = getVal(['Urun', 'Ürün', 'Aciklama', 'Ürün Adı']);
+            const groupRaw = getVal(['Grubu', 'Grup', 'Group']);
             
-            // Skip rows without quantity or product identifier
-            if (!qtyRaw || (!partCodeRaw && !nameRaw)) return;
+            // Skip empty quantity rows
+            if (!qtyRaw) return;
 
             let finalName = nameRaw;
-            let finalUnit = row['Birim'] || 'Adet';
-            let finalLocation = row['Reyon'] || row['Raf'] || row['Location'];
+            let finalUnit = getVal(['Birim']) || 'Adet';
+            let finalLocation = getVal(['Reyon', 'Raf', 'Location']);
             let finalPartCode = partCodeRaw ? String(partCodeRaw).trim() : undefined;
 
-            // Auto-fill from system data
+            // Auto-Fill from System Data
             if (finalPartCode) {
                 const systemProduct = products.find(p => p.part_code === finalPartCode);
                 if (systemProduct) {
@@ -142,24 +149,20 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
         });
 
         if (items.length === 0) {
-            alert("Dosyada geçerli sipariş kalemi bulunamadı. Lütfen şablonu kontrol edin.");
+            alert("Dosyada geçerli sipariş kalemi bulunamadı.");
         } else {
             setImportedItems(items);
         }
 
       } catch (e) {
           console.error(e);
-          alert("Excel okuma hatası! Dosya formatı desteklenmiyor veya bozuk.");
+          alert("Excel okuma hatası! Dosya formatı desteklenmiyor.");
       } finally {
-          // Reset input to allow re-uploading the same file
-          if (fileInputRef.current) {
-              fileInputRef.current.value = '';
-          }
+          if (fileInputRef.current) fileInputRef.current.value = ''; 
           e.target.value = '';
       }
     };
 
-    // UPDATED: Read as ArrayBuffer instead of BinaryString
     reader.readAsArrayBuffer(file);
   };
 
@@ -200,7 +203,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
   const startGuidedPicking = () => {
       if (!activeOrder) return;
 
-      // 1. Filter items that are not fully picked yet
       const pendingItems = activeOrder.items.filter(item => {
           const picked = pickedCounts[item.product_name] || 0;
           return picked < item.required_qty;
@@ -211,19 +213,13 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
           return;
       }
 
-      // 2. Sort items: Group -> Location (Numeric Sort) -> Name
+      // Sort: Group -> Location -> Name
       const sortedItems = [...pendingItems].sort((a, b) => {
-          // Group Sort
-          if (a.group && b.group && a.group !== b.group) {
-              return a.group.localeCompare(b.group);
-          }
+          if (a.group && b.group && a.group !== b.group) return a.group.localeCompare(b.group);
           if (a.group && !b.group) return -1;
           if (!a.group && b.group) return 1;
 
-          // Location Sort (Natural: A1, A2, A10)
-          if (a.location && b.location) {
-              return a.location.localeCompare(b.location, undefined, { numeric: true, sensitivity: 'base' });
-          }
+          if (a.location && b.location) return a.location.localeCompare(b.location, undefined, { numeric: true, sensitivity: 'base' });
           if (a.location && !b.location) return -1;
           if (!a.location && b.location) return 1;
 
@@ -256,7 +252,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
       const currentTarget = guidedItems[guidedIndex];
       const cleanCode = code.trim();
 
-      // Find system product from scanned code
       const product = products.find(p => 
           String(p.short_id) === cleanCode || p.barcode === cleanCode || p.part_code === cleanCode
       );
@@ -267,7 +262,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
           return;
       }
 
-      // STRICT CHECK: Does this product match the current target?
       const isMatch = (currentTarget.part_code && currentTarget.part_code === product.part_code) ||
                       (currentTarget.product_name.toLowerCase().trim() === product.product_name.toLowerCase().trim());
 
@@ -280,14 +274,12 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
               
               setScanMessage({ type: 'success', text: `DOĞRU: ${product.product_name}` });
 
-              // If fully picked, auto advance
               if (newVal >= currentTarget.required_qty) {
                   setTimeout(() => {
                       if (guidedIndex < guidedItems.length - 1) {
                           setGuidedIndex(prev => prev + 1);
-                          setScanMessage(null); // Clear message for next item
+                          setScanMessage(null);
                       } else {
-                          // Finished
                           alert("Tebrikler! Rota tamamlandı.");
                           setView('DETAIL');
                           setShowScanner(false);
@@ -307,7 +299,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
       }
   };
 
-  // Legacy Scan (Free Mode)
   const handleLegacyScan = (code: string) => {
       if (!activeOrder) return;
       const cleanCode = code.trim();
@@ -363,7 +354,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden transition-colors">
         
-        {/* HEADER */}
         {view !== 'GUIDED' && (
             <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700 bg-orange-50 dark:bg-orange-900/20">
             <h2 className="text-lg font-bold text-orange-800 dark:text-orange-300 flex items-center gap-2">
@@ -431,13 +421,11 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                                     placeholder="Örn: Proje A - Malzeme Listesi"
                                 />
                             </div>
-                            
                             <div className="flex justify-center">
                                 <button onClick={handleDownloadTemplate} className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
                                     <Download size={14} /> Örnek Şablonu İndir
                                 </button>
                             </div>
-
                             <div 
                                 onClick={() => fileInputRef.current?.click()}
                                 className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
@@ -468,10 +456,9 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                                     onClick={startGuidedPicking}
                                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none animate-pulse"
                                 >
-                                    <Play size={18} /> Sıralı Toplama Başlat
+                                    <Play size={18} /> Rota Başlat
                                 </button>
                             )}
-                            
                             {activeOrder.status !== 'COMPLETED' && (
                                 <button onClick={() => { onUpdateOrderStatus(activeOrder.id, 'COMPLETED'); setView('LIST'); }} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2"><Archive size={16}/> Tamamla</button>
                             )}
@@ -533,7 +520,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                 </div>
             )}
 
-            {/* --- GUIDED PICKING MODE VIEW --- */}
             {view === 'GUIDED' && guidedItems.length > 0 && (
                 <div className="h-full flex flex-col bg-slate-900 text-white">
                     <div className="flex justify-between items-center p-4 bg-slate-800 border-b border-slate-700">
@@ -544,8 +530,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                     <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
                         <div className="mb-2 text-slate-400 uppercase text-xs font-bold tracking-widest">Şu Anki Hedef</div>
                         
-                        {/* HUGE LOCATION CARD */}
-                        <div className="bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-900/50 mb-8 w-full max-w-sm border-4 border-blue-400">
+                        <div className="bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-900/50 mb-8 w-full max-w-sm border-4 border-blue-400 animate-pulse">
                             <div className="flex items-center justify-center gap-2 mb-1 opacity-80">
                                 <MapPin size={20}/>
                                 <span className="text-sm font-bold uppercase">Reyon / Raf</span>
@@ -560,7 +545,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                             )}
                         </div>
 
-                        {/* PRODUCT INFO */}
                         <div className="space-y-2 mb-8">
                             <h3 className="text-2xl font-bold text-white leading-tight">
                                 {guidedItems[guidedIndex].product_name}
@@ -573,7 +557,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                             </div>
                         </div>
 
-                        {/* COUNTER */}
                         <div className="flex items-end gap-2 mb-8">
                             <span className="text-6xl font-black text-green-400">
                                 {pickedCounts[guidedItems[guidedIndex].product_name] || 0}
@@ -585,7 +568,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                             <span className="text-sm text-slate-500 mb-2 ml-1">{guidedItems[guidedIndex].unit}</span>
                         </div>
 
-                        {/* PROGRESS */}
                         <div className="w-full max-w-sm bg-slate-800 h-2 rounded-full overflow-hidden mb-6">
                             <div 
                                 className="h-full bg-green-500 transition-all duration-300"
@@ -605,7 +587,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                             </button>
                             <button 
                                 onClick={() => setShowScanner(true)}
-                                className="flex-[2] py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-white shadow-lg shadow-blue-900/50 flex items-center justify-center gap-2 animate-pulse"
+                                className="flex-[2] py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-white shadow-lg shadow-blue-900/50 flex items-center justify-center gap-2"
                             >
                                 <ScanLine size={20}/> OKUT
                             </button>
@@ -613,7 +595,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                     </div>
                 </div>
             )}
-
         </div>
       </div>
     </div>

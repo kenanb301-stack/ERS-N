@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, CloudOff, Download, Mail, ScanLine, Clock, Check, ListChecks, ClipboardList, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle, Package, ArrowDownLeft, ArrowUpRight, CloudOff, Download, Mail, ScanLine, ClipboardList, ListChecks, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { Product, Transaction, TransactionType, User } from '../types';
 
 interface DashboardProps {
@@ -14,12 +14,13 @@ interface DashboardProps {
   onScan: () => void;
   onCycleCount: () => void;
   onReportSent: (productIds: string[]) => void;
+  onOpenProductDetail: () => void; // New prop
   currentUser: User;
   isCloudEnabled?: boolean;
   onOpenCloudSetup?: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderManager, onScan, onCycleCount, onReportSent, currentUser, isCloudEnabled, onOpenCloudSetup }) => {
+const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAction, onProductClick, onBulkAction, onViewNegativeStock, onOrderManager, onScan, onCycleCount, onReportSent, onOpenProductDetail, currentUser, isCloudEnabled, onOpenCloudSetup }) => {
   const [showAllCritical, setShowAllCritical] = useState(false);
   
   const totalProducts = products.length;
@@ -32,7 +33,6 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).length;
 
-  // Kritik Stok Listesini Sıkıştır (İlk 3 veya Hepsi)
   const displayedCriticalProducts = showAllCritical ? lowStockProducts : lowStockProducts.slice(0, 3);
 
   const handleExportCriticalStock = () => {
@@ -69,18 +69,6 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
       });
       setTimeout(() => { onReportSent(productsToReport.map(p => p.id)); }, 500);
       window.location.href = `mailto:?subject=${subject}&body=${body}`;
-  };
-
-  const getTimeDifference = (dateString?: string) => {
-    if (!dateString) return "Yeni";
-    const start = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - start.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays > 0) return `${diffDays} gün önce`;
-    if (diffHours > 0) return `${diffHours} saat önce`;
-    return "Az önce";
   };
 
   return (
@@ -147,10 +135,10 @@ const Dashboard: React.FC<DashboardProps> = ({ products, transactions, onQuickAc
               <span className="text-[10px] font-bold leading-tight">DÜZENLİ<br/>SAYIM</span>
             </button>
 
-            {/* Bulk Button (Hidden on very small screens if needed, but useful) */}
-            <button onClick={onBulkAction} className="flex flex-col items-center justify-center p-3 bg-slate-700 text-white rounded-xl shadow-lg shadow-slate-300 dark:shadow-none active:scale-95 transition-transform aspect-square text-center">
-               <Package size={24} className="mb-1" />
-               <span className="text-[10px] font-bold leading-tight">EXCEL<br/>İŞLEMLER</span>
+            {/* Info / Query Button */}
+            <button onClick={onOpenProductDetail} className="flex flex-col items-center justify-center p-3 bg-purple-600 text-white rounded-xl shadow-lg shadow-purple-200 dark:shadow-none active:scale-95 transition-transform aspect-square text-center">
+               <Info size={24} className="mb-1" />
+               <span className="text-[10px] font-bold leading-tight">SORGULA</span>
             </button>
           </div>
         </>

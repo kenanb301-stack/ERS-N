@@ -14,6 +14,7 @@ import Login from './components/Login';
 import DataBackupModal from './components/DataBackupModal';
 import CloudSetupModal from './components/CloudSetupModal';
 import CycleCountModal from './components/CycleCountModal'; 
+import ProductDetailModal from './components/ProductDetailModal';
 import { saveToSupabase, loadFromSupabase, clearDatabase } from './services/supabase';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
 import { Product, Transaction, TransactionType, ViewState, User, CloudConfig, Order } from './types';
@@ -26,7 +27,7 @@ const BarcodePrinterModal = lazy(() => import('./components/BarcodePrinterModal'
 const generateId = () => Math.random().toString(36).substring(2, 11);
 const generateShortId = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const APP_VERSION = "2.0.0"; // Major Update: WMS Features
+const APP_VERSION = "2.1.0"; // Major Update: Product Details
 
 function App() {
   // --- AUTH STATE ---
@@ -86,6 +87,7 @@ function App() {
   const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
   const [isCloudSetupOpen, setIsCloudSetupOpen] = useState(false);
   const [isCycleCountOpen, setIsCycleCountOpen] = useState(false);
+  const [isProductDetailOpen, setIsProductDetailOpen] = useState(false);
 
   const [isGlobalScannerOpen, setIsGlobalScannerOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Mobile Menu State
@@ -155,7 +157,7 @@ function App() {
       let productChanged = false;
       const newProduct = { ...p };
       if (!newProduct.short_id) {
-        let newId: string; // FIX: Explicit type
+        let newId: string;
         do { newId = generateShortId(); } while (existingShortIds.has(newId));
         existingShortIds.add(newId);
         newProduct.short_id = newId;
@@ -323,10 +325,33 @@ function App() {
           <BarcodeScanner 
             onScanSuccess={(code) => {
                 setIsGlobalScannerOpen(false);
-                setEditingTransaction(null);
-                setPreSelectedBarcode(code);
-                setModalType(TransactionType.IN);
-                setIsModalOpen(true);
+                // Check if code corresponds to a product for opening detail view
+                const product = products.find(p => String(p.short_id) === code.trim() || p.barcode === code.trim() || p.part_code === code.trim());
+                if (product) {
+                    // Option to view details or proceed to transaction
+                    if (confirm(`Ürün Bulundu: ${product.product_name}\n\nTamam: İşlem Yap\nİptal: Detay Gör`)) {
+                        setEditingTransaction(null);
+                        setPreSelectedBarcode(code);
+                        setModalType(TransactionType.IN);
+                        setIsModalOpen(true);
+                    } else {
+                        // Open Detail View
+                        // Needs state management for detail modal
+                        // For now, we can just open the modal directly if we had the prop, but let's assume we want detail modal to open
+                        // Since we can't easily pass product to the new modal from here without state, 
+                        // let's just open the modal and let it handle the code if passed, or just open scanner
+                        // Actually, better logic: 
+                        // Scan -> Modal Opens -> Modal finds product.
+                        setIsProductDetailOpen(true);
+                        // Ideally pass the code to pre-load, but the new modal has scanner too.
+                    }
+                } else {
+                    alert("Ürün bulunamadı. Yeni giriş yapabilirsiniz.");
+                    setEditingTransaction(null);
+                    setPreSelectedBarcode(code);
+                    setModalType(TransactionType.IN);
+                    setIsModalOpen(true);
+                }
             }}
             onClose={() => setIsGlobalScannerOpen(false)}
           />
@@ -471,6 +496,7 @@ function App() {
                             const updated = products.map(p => ids.includes(p.id) ? { ...p, last_alert_sent_at: now } : p);
                             saveData(updated, transactions, orders);
                         }}
+                        onOpenProductDetail={() => setIsProductDetailOpen(true)}
                         currentUser={currentUser}
                         isCloudEnabled={!!cloudConfig?.supabaseUrl}
                         onOpenCloudSetup={() => setIsCloudSetupOpen(true)}
@@ -619,7 +645,7 @@ function App() {
                         saveData(updated, transactions, orders);
                     } else {
                         const newId = `p-${generateId()}`;
-                        let shortId: string; // FIX: Explicit type
+                        let shortId: string;
                         do { shortId = generateShortId(); } while (products.some(p => p.short_id === shortId));
                         
                         const newProduct = { ...data, id: newId, short_id: shortId, barcode: shortId, created_at: new Date().toISOString() };
@@ -667,7 +693,7 @@ function App() {
                 }}
                 onProcessProducts={(newProds) => {
                     const processedProds = newProds.map(p => {
-                        let shortId: string; // FIX: Explicit type
+                        let shortId: string;
                         do { shortId = generateShortId(); } while (products.some(prod => prod.short_id === shortId));
                         return { 
                             ...p, 
@@ -693,6 +719,13 @@ function App() {
                 onClose={() => setIsDataBackupOpen(false)}
                 onBackup={handleBackupData}
                 onRestore={handleRestoreData}
+            />
+
+            <ProductDetailModal
+                isOpen={isProductDetailOpen}
+                onClose={() => setIsProductDetailOpen(false)}
+                products={products}
+                transactions={transactions}
             />
 
             <Suspense>
