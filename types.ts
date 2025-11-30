@@ -35,6 +35,23 @@ export interface Transaction {
   new_stock?: number;
 }
 
+// NEW: Order Management Types
+export interface OrderItem {
+  product_name: string; // Excel'den gelen isim
+  required_qty: number;
+  unit?: string;
+  matched_product_id?: string; // Sistemdeki eşleşen ürün ID'si
+}
+
+export interface Order {
+  id: string;
+  name: string; // Sipariş Adı / Müşteri
+  status: 'PENDING' | 'COMPLETED';
+  items: OrderItem[];
+  created_at: string;
+  note?: string;
+}
+
 export type ViewState = 'DASHBOARD' | 'INVENTORY' | 'HISTORY' | 'NEGATIVE_STOCK' | 'ANALYTICS';
 
 export interface TransactionFormData {

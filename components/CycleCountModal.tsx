@@ -1,6 +1,5 @@
-
-import React, { useState, useEffect } from 'react';
-import { X, CheckCircle, Search, Calendar, MapPin, Eye, EyeOff, ClipboardList, ScanLine, AlertTriangle, Check, PieChart, TrendingUp, ArrowRight, RefreshCw } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, CheckCircle, Search, MapPin, Eye, EyeOff, ClipboardList, ScanLine, AlertTriangle, ArrowRight, Package, ArrowLeft, Check } from 'lucide-react';
 import { Product } from '../types';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -11,122 +10,32 @@ interface CycleCountModalProps {
   onSubmitCount: (productId: string, countedQty: number) => void;
 }
 
-interface CountResult {
-    productId: string;
-    productName: string;
-    partCode?: string;
-    systemQty: number;
-    countedQty: number;
-    diff: number;
-}
-
 const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, products, onSubmitCount }) => {
-  const [activeTab, setActiveTab] = useState<'PLAN' | 'COUNT' | 'REPORT'>('PLAN');
+  const [step, setStep] = useState<'LOCATION' | 'COUNT'>('LOCATION');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [blindMode, setBlindMode] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  // Active counting state
-  const [activeProduct, setActiveProduct] = useState<Product | null>(null);
-  const [countedQty, setCountedQty] = useState<string>('');
   const [showScanner, setShowScanner] = useState(false);
+  const [countedProducts, setCountedProducts] = useState<Set<string>>(new Set());
 
-  // Session Results (Rapor için)
-  const [sessionResults, setSessionResults] = useState<CountResult[]>([]);
+  // Location Sorting Logic (Numeric Aware: A1, A2, A10)
+  const locations = useMemo(() => {
+      const locs = Array.from(new Set(products.map(p => p.location ? p.location.split('-')[0] : 'Belirsiz').filter(Boolean) as string[]));
+      return locs.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [products]);
 
-  useEffect(() => {
-      if (isOpen) {
-          // Modal her açıldığında değil, manuel sıfırlanmadıkça raporu tutabiliriz.
-          // Ancak temiz bir başlangıç için sıfırlayalım.
-          setSessionResults([]);
-          setActiveTab('PLAN');
-      }
-  }, [isOpen]);
+  // Products in Selected Location
+  const locationProducts = useMemo(() => {
+      if (!selectedLocation) return [];
+      return products
+        .filter(p => p.location && p.location.startsWith(selectedLocation))
+        .sort((a, b) => (a.location || '').localeCompare(b.location || '', undefined, { numeric: true }));
+  }, [products, selectedLocation]);
 
-  // Filter products that haven't been counted recently (e.g., > 30 days) or never
-  const productsDueForCount = products
-    .filter(p => {
-        if (!p.last_counted_at) return true;
-        const lastCount = new Date(p.last_counted_at);
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        return lastCount < thirtyDaysAgo;
-    })
-    .sort((a, b) => {
-        // Prioritize never counted, then oldest count
-        if (!a.last_counted_at) return -1;
-        if (!b.last_counted_at) return 1;
-        return new Date(a.last_counted_at).getTime() - new Date(b.last_counted_at).getTime();
-    });
-
-  // Unique locations for filter
-  const locations = Array.from(new Set(products.map(p => p.location?.split('-')[0]).filter(Boolean)));
-
-  const filteredPlanList = productsDueForCount.filter(p => 
-    (!selectedLocation || p.location?.startsWith(selectedLocation)) &&
-    (p.product_name.toLowerCase().includes(searchTerm.toLowerCase()) || p.part_code?.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const handleStartCount = (product: Product) => {
-      setActiveProduct(product);
-      setCountedQty('');
-      setActiveTab('COUNT');
+  // Handle Count Submission
+  const handleCountSubmit = (product: Product, qty: number) => {
+      onSubmitCount(product.id, qty);
+      setCountedProducts(prev => new Set(prev).add(product.id));
   };
-
-  const handleScanSuccess = (code: string) => {
-      setShowScanner(false);
-      const searchCode = code.trim();
-      const product = products.find(p => 
-          (p.barcode === searchCode) || 
-          (p.part_code === searchCode) || 
-          (p.id === searchCode) ||
-          (p.short_id === searchCode)
-      );
-
-      if (product) {
-          handleStartCount(product);
-      } else {
-          alert("Ürün bulunamadı!");
-      }
-  };
-
-  const submitCount = () => {
-      if (!activeProduct || countedQty === '') return;
-      
-      const qty = Number(countedQty);
-      const diff = qty - activeProduct.current_stock;
-
-      if (diff !== 0) {
-          if (!confirm(`DİKKAT: Sistem stoğu (${activeProduct.current_stock}) ile sayılan (${qty}) arasında ${diff} fark var. Stok düzeltilsin mi?`)) {
-              return;
-          }
-      }
-
-      // Veritabanına kaydet
-      onSubmitCount(activeProduct.id, qty);
-
-      // Oturum raporuna ekle
-      const result: CountResult = {
-          productId: activeProduct.id,
-          productName: activeProduct.product_name,
-          partCode: activeProduct.part_code,
-          systemQty: activeProduct.current_stock,
-          countedQty: qty,
-          diff: diff
-      };
-      setSessionResults(prev => [...prev, result]);
-
-      setActiveProduct(null);
-      setCountedQty('');
-      setActiveTab('PLAN'); 
-  };
-
-  // --- REPORT CALCULATIONS ---
-  const totalCounted = sessionResults.length;
-  const accurateItems = sessionResults.filter(r => r.diff === 0).length;
-  const accuracyRate = totalCounted > 0 ? Math.round((accurateItems / totalCounted) * 100) : 0;
-  const totalSurplus = sessionResults.reduce((acc, r) => acc + (r.diff > 0 ? r.diff : 0), 0);
-  const totalDeficit = sessionResults.reduce((acc, r) => acc + (r.diff < 0 ? Math.abs(r.diff) : 0), 0);
 
   if (!isOpen) return null;
 
@@ -134,302 +43,148 @@ const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, prod
     <>
     {showScanner && (
         <BarcodeScanner 
-            onScanSuccess={handleScanSuccess} 
+            onScanSuccess={(code) => {
+                // Basit tarama mantığı eklenebilir, şimdilik sadece kapatıyoruz
+                setShowScanner(false);
+                alert(`Barkod: ${code} (Bu ekranda henüz otomatik bulma aktif değil, listeden seçiniz)`);
+            }} 
             onClose={() => setShowScanner(false)} 
         />
     )}
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden transition-colors">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden transition-colors">
         
-        {/* Header */}
+        {/* HEADER */}
         <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700 bg-indigo-50 dark:bg-indigo-900/20">
-          <h2 className="text-lg font-bold text-indigo-800 dark:text-indigo-300 flex items-center gap-2">
-            <ClipboardList size={24} />
-            Düzenli Sayım Modülü (Cycle Counting)
-          </h2>
+          <div className="flex items-center gap-3">
+              {step === 'COUNT' && (
+                  <button onClick={() => setStep('LOCATION')} className="p-1 rounded-full hover:bg-black/10 transition-colors">
+                      <ArrowLeft size={20} className="text-indigo-800 dark:text-indigo-300" />
+                  </button>
+              )}
+              <h2 className="text-lg font-bold text-indigo-800 dark:text-indigo-300 flex items-center gap-2">
+                <ClipboardList size={24} />
+                {step === 'LOCATION' ? 'Sayım Başlat: Reyon Seç' : `Sayım: ${selectedLocation} Reyonu`}
+              </h2>
+          </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <X size={24} />
           </button>
         </div>
 
-        {/* Tabs & Toolbar */}
-        {activeTab !== 'REPORT' && (
-            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-4 justify-between items-center bg-white dark:bg-slate-800">
-                <div className="flex gap-2 w-full sm:w-auto">
-                    <button 
-                        onClick={() => { setActiveTab('PLAN'); setActiveProduct(null); }}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'PLAN' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}
-                    >
-                        Planlama Listesi
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('COUNT')}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === 'COUNT' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}
-                    >
-                        Sayım Ekranı
-                    </button>
-                </div>
-
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg">
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Kör Sayım:</span>
-                        <button 
-                            onClick={() => setBlindMode(!blindMode)}
-                            className={`p-1 rounded ${blindMode ? 'bg-green-500 text-white' : 'bg-slate-300 dark:bg-slate-600 text-slate-500'}`}
-                            title={blindMode ? "Sistem stoğu gizli (Önerilen)" : "Sistem stoğu açık"}
-                        >
-                            {blindMode ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                    </div>
-                    <button 
-                        onClick={() => setShowScanner(true)}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm active:scale-95 transition-transform"
-                    >
-                        <ScanLine size={18} /> <span className="hidden sm:inline">Barkodla Başla</span>
-                    </button>
-                </div>
-            </div>
-        )}
-
-        {/* Content */}
+        {/* CONTENT */}
         <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900 p-4">
             
-            {activeTab === 'PLAN' && (
+            {/* STEP 1: LOCATION SELECTION */}
+            {step === 'LOCATION' && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {locations.map(loc => {
+                        const count = products.filter(p => p.location?.startsWith(loc)).length;
+                        return (
+                            <button 
+                                key={loc}
+                                onClick={() => { setSelectedLocation(loc); setStep('COUNT'); }}
+                                className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:border-indigo-500 hover:shadow-md transition-all flex flex-col items-center justify-center gap-2 group"
+                            >
+                                <span className="text-2xl font-black text-slate-700 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">{loc}</span>
+                                <span className="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">{count} Ürün</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* STEP 2: COUNTING (CARD VIEW) */}
+            {step === 'COUNT' && (
                 <div className="space-y-4">
-                    {/* Filters */}
-                    <div className="flex gap-2">
-                        <select 
-                            value={selectedLocation} 
-                            onChange={(e) => setSelectedLocation(e.target.value)}
-                            className="p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-sm outline-none focus:border-indigo-500"
-                        >
-                            <option value="">Tüm Reyonlar</option>
-                            {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-                        </select>
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                            <input 
-                                type="text" 
-                                placeholder="Ürün ara..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-sm outline-none focus:border-indigo-500"
-                            />
+                    <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm sticky top-0 z-10">
+                        <div className="text-sm font-bold text-slate-600 dark:text-slate-300">
+                            {countedProducts.size} / {locationProducts.length} Sayıldı
                         </div>
-                    </div>
-
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold">
-                                <tr>
-                                    <th className="p-3">Parça Kodu</th>
-                                    <th className="p-3">Ürün Adı</th>
-                                    <th className="p-3">Reyon</th>
-                                    <th className="p-3 text-center">Son Sayım</th>
-                                    <th className="p-3 text-right">İşlem</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {filteredPlanList.map(p => (
-                                    <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
-                                        <td className="p-3 font-mono font-bold text-slate-700 dark:text-slate-300">{p.part_code || '-'}</td>
-                                        <td className="p-3 text-slate-800 dark:text-slate-200">{p.product_name}</td>
-                                        <td className="p-3"><span className="bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400 px-2 py-0.5 rounded text-xs font-bold">{p.location || '-'}</span></td>
-                                        <td className="p-3 text-center text-slate-500 text-xs">
-                                            {p.last_counted_at ? new Date(p.last_counted_at).toLocaleDateString() : <span className="text-red-500 font-bold">Hiç Sayılmadı</span>}
-                                        </td>
-                                        <td className="p-3 text-right">
-                                            <button 
-                                                onClick={() => handleStartCount(p)}
-                                                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                                            >
-                                                Say
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {filteredPlanList.length === 0 && (
-                                    <tr>
-                                        <td colSpan={5} className="p-8 text-center text-slate-400">Sayılması gereken acil ürün yok.</td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'COUNT' && (
-                <div className="flex flex-col items-center justify-center h-full max-w-lg mx-auto">
-                    {!activeProduct ? (
-                        <div className="text-center text-slate-400">
-                            <ClipboardList size={48} className="mx-auto mb-4 opacity-50" />
-                            <p className="text-lg font-medium">Sayım yapmak için bir ürün seçin</p>
-                            <p className="text-sm mt-2">Listeden seçebilir veya barkod okutabilirsiniz.</p>
-                            <button onClick={() => setActiveTab('PLAN')} className="mt-4 text-indigo-600 dark:text-indigo-400 font-bold hover:underline">Listeye Dön</button>
-                        </div>
-                    ) : (
-                        <div className="w-full bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                            <div className="p-6 text-center border-b border-slate-100 dark:border-slate-700">
-                                <span className="inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-xs font-bold mb-2">
-                                    Aktif Sayım
-                                </span>
-                                <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-1">{activeProduct.product_name}</h2>
-                                <p className="text-lg font-mono text-slate-500 dark:text-slate-400">{activeProduct.part_code}</p>
-                                {activeProduct.location && (
-                                    <div className="mt-4 flex justify-center">
-                                        <span className="flex items-center gap-1 bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 px-3 py-1 rounded-lg font-bold">
-                                            <MapPin size={16} /> {activeProduct.location}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="p-8 bg-slate-50 dark:bg-slate-900/50">
-                                <div className="mb-6">
-                                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 text-center">Fiziksel Sayım Adeti</label>
-                                    <input 
-                                        type="number" 
-                                        value={countedQty}
-                                        onChange={(e) => setCountedQty(e.target.value)}
-                                        placeholder="0"
-                                        autoFocus
-                                        className="w-full text-center text-4xl font-bold p-4 rounded-xl border-2 border-indigo-200 focus:border-indigo-500 outline-none bg-white dark:bg-slate-800 dark:border-slate-600 dark:text-white"
-                                    />
-                                </div>
-
-                                {!blindMode && (
-                                    <div className="text-center mb-6 p-3 bg-slate-200 dark:bg-slate-700 rounded-lg">
-                                        <span className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold block">Sistem Kaydı</span>
-                                        <span className="text-xl font-bold text-slate-700 dark:text-slate-200">{activeProduct.current_stock} {activeProduct.unit}</span>
-                                    </div>
-                                )}
-
-                                <div className="flex gap-3">
-                                    <button 
-                                        onClick={() => setActiveProduct(null)}
-                                        className="flex-1 py-3 rounded-xl font-bold text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
-                                    >
-                                        İptal
-                                    </button>
-                                    <button 
-                                        onClick={submitCount}
-                                        disabled={countedQty === ''}
-                                        className="flex-1 py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 dark:shadow-none transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                    >
-                                        <CheckCircle size={20} />
-                                        Onayla
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {activeTab === 'REPORT' && (
-                <div className="max-w-2xl mx-auto space-y-6">
-                    <div className="text-center">
-                        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Sayım Özeti</h2>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm">Bu oturumda yapılan işlemlerin raporu</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl text-center">
-                            <div className="text-2xl font-black text-slate-800 dark:text-white">{totalCounted}</div>
-                            <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Sayılan Ürün</div>
-                        </div>
-                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl text-center">
-                            <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{accuracyRate}%</div>
-                            <div className="text-xs font-bold text-emerald-700 dark:text-emerald-300 uppercase">Doğruluk</div>
-                        </div>
-                        <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl text-center">
-                            <div className="text-2xl font-black text-red-600 dark:text-red-400">{totalDeficit}</div>
-                            <div className="text-xs font-bold text-red-700 dark:text-red-300 uppercase">Toplam Eksik</div>
-                        </div>
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl text-center">
-                            <div className="text-2xl font-black text-blue-600 dark:text-blue-400">{totalSurplus}</div>
-                            <div className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase">Toplam Fazla</div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                        <div className="p-4 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-200">
-                            Fark Tespit Edilen Ürünler
-                        </div>
-                        <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                            {sessionResults.filter(r => r.diff !== 0).length === 0 ? (
-                                <div className="p-8 text-center text-emerald-500">
-                                    <CheckCircle size={48} className="mx-auto mb-2" />
-                                    <p className="font-bold">Mükemmel!</p>
-                                    <p className="text-sm">Hiçbir üründe fark çıkmadı.</p>
-                                </div>
-                            ) : (
-                                sessionResults.filter(r => r.diff !== 0).map((res, idx) => (
-                                    <div key={idx} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                        <div>
-                                            <div className="font-bold text-slate-800 dark:text-white">{res.productName}</div>
-                                            <div className="text-xs text-slate-500 font-mono">{res.partCode}</div>
-                                        </div>
-                                        <div className="text-right flex items-center gap-4">
-                                            <div className="text-xs text-slate-400">
-                                                <div>Sistem: {res.systemQty}</div>
-                                                <div>Sayılan: {res.countedQty}</div>
-                                            </div>
-                                            <div className={`font-bold text-lg ${res.diff > 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                                {res.diff > 0 ? `+${res.diff}` : res.diff}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="flex gap-3">
                         <button 
-                            onClick={() => setActiveTab('PLAN')}
-                            className="flex-1 py-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                            onClick={() => setBlindMode(!blindMode)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${blindMode ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-100 text-red-700'}`}
                         >
-                            Sayima Devam Et
-                        </button>
-                        <button 
-                            onClick={() => {
-                                setSessionResults([]);
-                                onClose();
-                            }}
-                            className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none"
-                        >
-                            Oturumu Kapat
+                            {blindMode ? <EyeOff size={14} /> : <Eye size={14} />}
+                            {blindMode ? 'Kör Modu (Güvenli)' : 'Stok Açık'}
                         </button>
                     </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {locationProducts.map(product => {
+                            const isCounted = countedProducts.has(product.id);
+                            return (
+                                <CountCard 
+                                    key={product.id} 
+                                    product={product} 
+                                    blindMode={blindMode} 
+                                    isCounted={isCounted}
+                                    onCount={handleCountSubmit} 
+                                />
+                            );
+                        })}
+                    </div>
                 </div>
             )}
-
         </div>
-
-        {/* LIVE STATUS BAR (Only visible if counting started) */}
-        {sessionResults.length > 0 && activeTab === 'PLAN' && (
-            <div className="p-3 bg-slate-800 text-white flex items-center justify-between shadow-lg z-10 border-t border-slate-700">
-                <div className="flex gap-4 text-xs sm:text-sm">
-                    <span className="flex items-center gap-1"><CheckCircle size={14} className="text-emerald-400"/> Sayılan: <b>{totalCounted}</b></span>
-                    <span className="flex items-center gap-1"><TrendingUp size={14} className="text-blue-400"/> Doğruluk: <b>%{accuracyRate}</b></span>
-                    {(totalDeficit > 0 || totalSurplus > 0) && (
-                        <span className="flex items-center gap-1 text-red-300 animate-pulse"><AlertTriangle size={14}/> Fark: <b>{totalDeficit + totalSurplus}</b></span>
-                    )}
-                </div>
-                <button 
-                    onClick={() => setActiveTab('REPORT')}
-                    className="flex items-center gap-1 text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded transition-colors"
-                >
-                    Raporu Gör <ArrowRight size={12} />
-                </button>
-            </div>
-        )}
       </div>
     </div>
     </>
   );
+};
+
+interface CountCardProps {
+    product: Product;
+    blindMode: boolean;
+    isCounted: boolean;
+    onCount: (p: Product, q: number) => void;
+}
+
+// Sub-Component for Individual Count Card
+const CountCard: React.FC<CountCardProps> = ({ product, blindMode, isCounted, onCount }) => {
+    const [val, setVal] = useState('');
+    
+    return (
+        <div className={`p-4 rounded-xl border transition-all ${isCounted ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800 opacity-70' : 'bg-white border-slate-200 dark:bg-slate-800 dark:border-slate-700 shadow-sm'}`}>
+            <div className="flex justify-between items-start mb-3">
+                <div>
+                    <h4 className="font-bold text-slate-800 dark:text-white">{product.product_name}</h4>
+                    <p className="text-xs font-mono text-slate-500 dark:text-slate-400">{product.part_code}</p>
+                </div>
+                <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-slate-600 dark:text-slate-300">
+                    {product.location}
+                </span>
+            </div>
+
+            <div className="flex gap-3 items-center">
+                {!blindMode && (
+                    <div className="text-center px-3">
+                        <span className="block text-[10px] text-slate-400 uppercase font-bold">Sistem</span>
+                        <span className="text-lg font-bold text-slate-600 dark:text-slate-300">{product.current_stock}</span>
+                    </div>
+                )}
+                
+                <div className="flex-1 flex gap-2">
+                    <input 
+                        type="number" 
+                        placeholder="Sayım"
+                        value={val}
+                        onChange={(e) => setVal(e.target.value)}
+                        disabled={isCounted}
+                        className="w-full p-2 text-center font-bold text-lg rounded-lg border border-indigo-200 focus:border-indigo-500 outline-none bg-white dark:bg-slate-900 dark:border-slate-600 dark:text-white"
+                    />
+                    <button 
+                        onClick={() => onCount(product, Number(val))}
+                        disabled={val === '' || isCounted}
+                        className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white p-2 rounded-lg transition-colors"
+                    >
+                        <Check size={24} />
+                    </button>
+                </div>
+            </div>
+            {isCounted && <div className="mt-2 text-xs text-center text-emerald-600 font-bold flex items-center justify-center gap-1"><CheckCircle size={12}/> Tamamlandı</div>}
+        </div>
+    );
 };
 
 export default CycleCountModal;
