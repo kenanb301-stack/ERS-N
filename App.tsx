@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
-import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw, CheckCircle2, Loader2, WifiOff, Info } from 'lucide-react';
+import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw, CheckCircle2, Loader2, WifiOff, Info, MoreHorizontal, Settings } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import InventoryList from './components/InventoryList';
 import TransactionHistory from './components/TransactionHistory';
@@ -8,7 +8,7 @@ import TransactionModal from './components/TransactionModal';
 import ProductModal from './components/ProductModal';
 import BulkTransactionModal from './components/BulkTransactionModal';
 import NegativeStockList from './components/NegativeStockList';
-import OrderManagerModal from './components/OrderManagerModal'; // CHANGED
+import OrderManagerModal from './components/OrderManagerModal';
 import BarcodeScanner from './components/BarcodeScanner';
 import Login from './components/Login';
 import DataBackupModal from './components/DataBackupModal';
@@ -16,7 +16,7 @@ import CloudSetupModal from './components/CloudSetupModal';
 import CycleCountModal from './components/CycleCountModal'; 
 import { saveToSupabase, loadFromSupabase, clearDatabase } from './services/supabase';
 import { INITIAL_PRODUCTS, INITIAL_TRANSACTIONS } from './constants';
-import { Product, Transaction, TransactionType, ViewState, User, CloudConfig, Order } from './types'; // ADDED Order
+import { Product, Transaction, TransactionType, ViewState, User, CloudConfig, Order } from './types';
 
 // Lazy Load Heavy Components
 const Analytics = lazy(() => import('./components/Analytics'));
@@ -50,7 +50,7 @@ function App() {
     } catch (e) { return INITIAL_TRANSACTIONS; }
   });
 
-  // NEW: ORDERS STATE
+  // ORDERS STATE
   const [orders, setOrders] = useState<Order[]>(() => {
       try {
           const saved = localStorage.getItem('depopro_orders');
@@ -81,13 +81,14 @@ function App() {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkModalMode, setBulkModalMode] = useState<'TRANSACTION' | 'PRODUCT'>('TRANSACTION');
 
-  const [isOrderManagerOpen, setIsOrderManagerOpen] = useState(false); // CHANGED
+  const [isOrderManagerOpen, setIsOrderManagerOpen] = useState(false);
   const [isBarcodePrinterOpen, setIsBarcodePrinterOpen] = useState(false);
   const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
   const [isCloudSetupOpen, setIsCloudSetupOpen] = useState(false);
   const [isCycleCountOpen, setIsCycleCountOpen] = useState(false);
 
   const [isGlobalScannerOpen, setIsGlobalScannerOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Mobile Menu State
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
@@ -105,7 +106,7 @@ function App() {
     else localStorage.removeItem('depopro_user');
   }, [currentUser]);
 
-  // UPDATED SAVE DATA (Now includes Orders)
+  // UPDATED SAVE DATA
   const saveData = useCallback((newProducts: Product[], newTransactions: Transaction[], newOrders?: Order[], silent: boolean = false) => {
       try {
         setProducts(newProducts);
@@ -130,7 +131,6 @@ function App() {
       if (!cloudConfig?.supabaseUrl || !cloudConfig?.supabaseKey) return;
       if (!silent) setSyncStatus('SYNCING');
       try {
-          // Pass orders to supabase save
           const result = await saveToSupabase(cloudConfig.supabaseUrl, cloudConfig.supabaseKey, prods, txs, ords);
           if (result.success) {
               if (!silent) {
@@ -186,7 +186,7 @@ function App() {
            if (result.success && result.data) {
                const cloudProducts = result.data.products || [];
                const cloudTransactions = result.data.transactions || [];
-               const cloudOrders = result.data.orders || []; // New
+               const cloudOrders = result.data.orders || [];
 
                const mergedProducts = cloudProducts.map(cp => {
                    const localMatch = products.find(lp => lp.id === cp.id);
@@ -232,9 +232,8 @@ function App() {
   }, [cloudConfig, currentUser, performCloudLoad]);
 
   const handleLogin = (user: User) => setCurrentUser(user);
-  const handleLogout = () => { setCurrentUser(null); setCurrentView('DASHBOARD'); };
+  const handleLogout = () => { setCurrentUser(null); setCurrentView('DASHBOARD'); setIsMobileMenuOpen(false); };
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
-  const hasNegativeStock = products.some(p => p.current_stock < 0);
 
   const handleSaveCloudConfig = (url: string, key: string) => {
       const newConfig = { supabaseUrl: url, supabaseKey: key };
@@ -243,11 +242,58 @@ function App() {
       setTimeout(() => performCloudLoad(false), 500);
   };
 
-  const handleBackupData = () => { /* ... existing code ... */ };
-  const handleRestoreData = async (file: File) => { /* ... existing code ... */ };
-  const handleResetData = async () => { /* ... existing code ... */ };
+  const handleBackupData = () => {
+    const data = {
+        products,
+        transactions,
+        orders,
+        version: "2.0",
+        date: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `depopro_yedek_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-  // Handlers for Order Manager
+  const handleRestoreData = async (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const data = JSON.parse(e.target?.result as string);
+            if (data.products && Array.isArray(data.products)) {
+                const restoredOrders = data.orders || [];
+                saveData(data.products, data.transactions || [], restoredOrders);
+                alert('Yedek başarıyla yüklendi!');
+                setIsDataBackupOpen(false);
+            } else {
+                alert('Geçersiz yedek dosyası!');
+            }
+        } catch (error) {
+            alert('Dosya okuma hatası!');
+        }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleResetData = async () => {
+      if (confirm("DİKKAT: Tüm veriler (Ürünler, Hareketler, Siparişler) silinecek! Onaylıyor musunuz?")) {
+          if (confirm("SON ONAY: Bu işlem geri alınamaz. Emin misiniz?")) {
+              if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
+                  await clearDatabase(cloudConfig.supabaseUrl, cloudConfig.supabaseKey);
+              }
+              localStorage.removeItem('depopro_products');
+              localStorage.removeItem('depopro_transactions');
+              localStorage.removeItem('depopro_orders');
+              window.location.reload();
+          }
+      }
+  };
+
   const handleSaveOrder = (newOrder: Order) => {
       const updatedOrders = [...orders, newOrder];
       saveData(products, transactions, updatedOrders);
@@ -261,15 +307,6 @@ function App() {
       saveData(products, transactions, updatedOrders);
   };
 
-  const handleTransactionSubmit = useCallback((data: any) => { /* ... existing code, call saveData with current orders */ 
-      // ... (logic) ...
-      // saveData(updatedProducts, updatedTransactions, orders); 
-  }, [products, transactions, orders, currentUser, saveData]);
-
-  // Need to patch handleTransactionSubmit, handleDeleteTransaction, handleSaveProduct, handleDeleteProduct 
-  // to pass 'orders' to saveData. For brevity, assuming they use the callback scope 'orders'.
-
-  // Simplified Nav Items
   const navItems = [
     { id: 'DASHBOARD', label: 'Özet', icon: LayoutDashboard },
     { id: 'ANALYTICS', label: 'Analiz', icon: BarChart3 }, 
@@ -295,16 +332,84 @@ function App() {
           />
       )}
 
-      {/* Sidebar & Mobile Header omitted for brevity, logic remains same */}
+      {/* --- MOBILE HEADER --- */}
+      <div className="md:hidden fixed top-0 w-full z-30 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-3 flex justify-between items-center shadow-sm">
+          <div className="flex items-center gap-2">
+              <div className="bg-blue-600 p-1.5 rounded-lg">
+                  <Package className="text-white" size={20} />
+              </div>
+              <div>
+                  <h1 className="text-lg font-bold text-slate-800 dark:text-white leading-none">DepoPro</h1>
+                  <span className="text-[10px] text-slate-400 font-mono">v{APP_VERSION}</span>
+              </div>
+          </div>
+          <div className="flex items-center gap-3">
+              {/* Cloud Status Icon */}
+              {cloudConfig?.supabaseUrl ? (
+                  syncStatus === 'SYNCING' ? <RefreshCw size={18} className="animate-spin text-blue-500" /> :
+                  syncStatus === 'SUCCESS' ? <Cloud size={18} className="text-green-500" /> :
+                  <Cloud size={18} className="text-red-500" />
+              ) : (
+                  <WifiOff size={18} className="text-slate-300" />
+              )}
+              
+              <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 -mr-2 text-slate-600 dark:text-slate-300">
+                  <Menu size={24} />
+              </button>
+          </div>
+      </div>
+
+      {/* --- MOBILE MENU OVERLAY --- */}
+      {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm md:hidden animate-fade-in" onClick={() => setIsMobileMenuOpen(false)}>
+              <div className="absolute right-0 top-0 bottom-0 w-64 bg-white dark:bg-slate-800 shadow-xl p-4 flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="flex justify-between items-center mb-6 border-b border-slate-100 dark:border-slate-700 pb-4">
+                      <span className="font-bold text-lg dark:text-white">Ayarlar</span>
+                      <button onClick={() => setIsMobileMenuOpen(false)}><X size={24} className="text-slate-400" /></button>
+                  </div>
+                  
+                  <div className="space-y-2 flex-1">
+                      <button onClick={() => { setIsCloudSetupOpen(true); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium">
+                          <Cloud size={20} /> Bulut Ayarları
+                      </button>
+                      <button onClick={() => { setIsDataBackupOpen(true); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium">
+                          <DatabaseIcon size={20} /> Yedekle / Geri Yükle
+                      </button>
+                      <button onClick={toggleDarkMode} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium">
+                          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                          {isDarkMode ? 'Aydınlık Mod' : 'Karanlık Mod'}
+                      </button>
+                  </div>
+
+                  <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold mt-4">
+                      <LogOut size={20} /> Çıkış Yap
+                  </button>
+              </div>
+          </div>
+      )}
+
+      {/* --- DESKTOP SIDEBAR --- */}
       <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 h-screen sticky top-0 transition-colors duration-300">
-          {/* ... Sidebar content ... */}
           <div className="p-6 border-b border-slate-100 dark:border-slate-700">
             <h1 className="text-2xl font-bold text-blue-600 flex items-center gap-2">
                 <Package className="fill-blue-600 text-white" size={28} />
                 <span className="dark:text-white text-slate-800">DepoPro</span>
             </h1>
-            <p className="text-xs text-slate-400 mt-1 pl-1">v{APP_VERSION}</p>
+            <p className="text-xs text-slate-400 mt-1 pl-1">v{APP_VERSION} Pro</p>
         </div>
+
+        <div className="p-4">
+            <div className="bg-slate-100 dark:bg-slate-700 rounded-xl p-3 flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 flex items-center justify-center font-bold text-lg">
+                    {currentUser.name.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{currentUser.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{currentUser.role === 'ADMIN' ? 'Yönetici' : 'İzleyici'}</p>
+                </div>
+            </div>
+        </div>
+
         <nav className="flex-1 p-4 space-y-2">
             {navItems.map(item => (
                 <button
@@ -321,10 +426,32 @@ function App() {
                 </button>
             ))}
         </nav>
-        {/* ... Bottom Actions ... */}
+
+        <div className="p-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
+            {/* Sync Status Desktop */}
+            {cloudConfig?.supabaseUrl && (
+                <div className="flex items-center justify-between px-3 py-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                        {syncStatus === 'SYNCING' ? <RefreshCw size={14} className="animate-spin text-blue-500" /> :
+                         syncStatus === 'SUCCESS' ? <Cloud size={14} className="text-green-500" /> :
+                         <Cloud size={14} className="text-red-500" />}
+                        <span>{syncStatus === 'SYNCING' ? 'Eşitleniyor...' : syncStatus === 'SUCCESS' ? 'Eşitlendi' : 'Bağlantı Yok'}</span>
+                    </div>
+                    {/* Force Sync Button */}
+                    <button onClick={() => performCloudLoad(false, true)} className="hover:text-blue-500" title="Zorla İndir"><DownloadCloud size={14}/></button>
+                </div>
+            )}
+
+            <div className="grid grid-cols-4 gap-1">
+                <button onClick={() => setIsCloudSetupOpen(true)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg flex justify-center" title="Bulut Ayarları"><Cloud size={18}/></button>
+                <button onClick={() => setIsDataBackupOpen(true)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg flex justify-center" title="Yedekle"><DatabaseIcon size={18}/></button>
+                <button onClick={toggleDarkMode} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg flex justify-center" title="Tema">{isDarkMode ? <Sun size={18}/> : <Moon size={18}/>}</button>
+                <button onClick={handleLogout} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex justify-center" title="Çıkış"><LogOut size={18}/></button>
+            </div>
+        </div>
       </aside>
 
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-auto min-h-[calc(100vh-140px)] md:h-screen pb-24 md:pb-8">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-auto min-h-screen pt-20 pb-24 md:pt-8 md:pb-8">
         <Suspense fallback={<div className="flex justify-center p-10"><Loader2 className="animate-spin"/></div>}>
             <div className="max-w-5xl mx-auto">
                 {/* View Switcher */}
@@ -381,9 +508,33 @@ function App() {
                         currentUser={currentUser}
                     />
                 )}
+                {currentView === 'NEGATIVE_STOCK' && (
+                    <NegativeStockList products={products} onBack={() => setCurrentView('DASHBOARD')} />
+                )}
             </div>
         </Suspense>
       </main>
+
+      {/* --- MOBILE BOTTOM NAV --- */}
+      <div className="md:hidden fixed bottom-0 w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center py-2 px-2 z-30 pb-safe">
+          {navItems.map(item => (
+              <button
+                  key={item.id}
+                  onClick={() => setCurrentView(item.id as ViewState)}
+                  className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-colors ${currentView === item.id ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-slate-700' : 'text-slate-400 dark:text-slate-500'}`}
+              >
+                  <item.icon size={20} />
+                  <span className="text-[10px] font-medium">{item.label}</span>
+              </button>
+          ))}
+          {/* Floating Scan Button in Bottom Nav */}
+          <button 
+            onClick={() => setIsGlobalScannerOpen(true)}
+            className="absolute -top-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white p-3 rounded-full shadow-lg shadow-blue-300 dark:shadow-blue-900 border-4 border-slate-50 dark:border-slate-900 active:scale-95 transition-transform"
+          >
+              <ScanLine size={24} />
+          </button>
+      </div>
 
       {/* Modals */}
       {currentUser.role === 'ADMIN' && (
@@ -392,7 +543,6 @@ function App() {
                 isOpen={isModalOpen}
                 onClose={() => { setIsModalOpen(false); setEditingTransaction(null); }}
                 onSubmit={(data) => {
-                    // Reimplement submit logic briefly to include orders in save
                     const prod = products.find(p => p.id === data.productId);
                     if(prod) {
                         const change = data.type === 'IN' ? data.quantity : -data.quantity;
@@ -459,13 +609,101 @@ function App() {
                     saveData(updatedProducts, updatedTransactions, orders);
                 }}
             />
-            {/* Other modals (Product, Bulk, Cloud, Backup) would follow same pattern passing orders to save */}
+            
+            <ProductModal
+                isOpen={isProductModalOpen}
+                onClose={() => { setIsProductModalOpen(false); setEditingProduct(null); }}
+                onSubmit={(data) => {
+                    if (editingProduct) {
+                        const updated = products.map(p => p.id === editingProduct.id ? { ...p, ...data } : p);
+                        saveData(updated, transactions, orders);
+                    } else {
+                        const newId = `p-${generateId()}`;
+                        let shortId;
+                        do { shortId = generateShortId(); } while (products.some(p => p.short_id === shortId));
+                        
+                        const newProduct = { ...data, id: newId, short_id: shortId, barcode: shortId, created_at: new Date().toISOString() };
+                        saveData([...products, newProduct], transactions, orders);
+                    }
+                }}
+                onDelete={(id) => {
+                    const updated = products.filter(p => p.id !== id);
+                    saveData(updated, transactions, orders);
+                    setIsProductModalOpen(false);
+                }}
+                productToEdit={editingProduct}
+            />
+
+            <BulkTransactionModal
+                isOpen={isBulkModalOpen}
+                onClose={() => setIsBulkModalOpen(false)}
+                initialMode={bulkModalMode}
+                products={products}
+                onProcessTransactions={(newTxs) => {
+                    let currentProducts = [...products];
+                    let currentTxs = [...transactions];
+                    
+                    newTxs.forEach(txItem => {
+                        const prod = currentProducts.find(p => p.id === txItem.productId);
+                        if(prod) {
+                            const change = txItem.type === TransactionType.IN ? txItem.quantity : -txItem.quantity;
+                            const newStock = prod.current_stock + change;
+                            currentProducts = currentProducts.map(p => p.id === txItem.productId ? {...p, current_stock: newStock} : p);
+                            currentTxs = [{
+                                id: `t-${generateId()}-${Math.random().toString(36).substr(2,5)}`,
+                                product_id: txItem.productId,
+                                product_name: prod.product_name,
+                                type: txItem.type,
+                                quantity: txItem.quantity,
+                                date: new Date().toISOString(),
+                                description: txItem.description,
+                                created_by: currentUser.name,
+                                previous_stock: prod.current_stock,
+                                new_stock: newStock
+                            }, ...currentTxs];
+                        }
+                    });
+                    saveData(currentProducts, currentTxs, orders);
+                }}
+                onProcessProducts={(newProds) => {
+                    const processedProds = newProds.map(p => {
+                        let shortId;
+                        do { shortId = generateShortId(); } while (products.some(prod => prod.short_id === shortId));
+                        return { 
+                            ...p, 
+                            id: `p-${generateId()}-${Math.random().toString(36).substr(2,5)}`, 
+                            short_id: shortId, 
+                            barcode: shortId,
+                            created_at: new Date().toISOString() 
+                        };
+                    });
+                    saveData([...products, ...processedProds], transactions, orders);
+                }}
+            />
+
              <CloudSetupModal 
                 isOpen={isCloudSetupOpen}
                 onClose={() => setIsCloudSetupOpen(false)}
                 onSave={handleSaveCloudConfig}
                 currentConfig={cloudConfig}
             />
+
+            <DataBackupModal
+                isOpen={isDataBackupOpen}
+                onClose={() => setIsDataBackupOpen(false)}
+                onBackup={handleBackupData}
+                onRestore={handleRestoreData}
+            />
+
+            <Suspense>
+                {isBarcodePrinterOpen && (
+                    <BarcodePrinterModal 
+                        isOpen={isBarcodePrinterOpen} 
+                        onClose={() => setIsBarcodePrinterOpen(false)} 
+                        products={products} 
+                    />
+                )}
+            </Suspense>
         </>
       )}
     </div>
