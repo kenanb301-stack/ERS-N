@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, FileSpreadsheet, AlertTriangle, CheckCircle, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download } from 'lucide-react';
+import { X, Upload, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download, CheckCircle, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, Order, OrderItem } from '../types';
 import BarcodeScanner from './BarcodeScanner';
@@ -41,9 +41,11 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
   // --- HANDLERS ---
 
   const handleDownloadTemplate = () => {
+    // Sadeleştirilmiş Şablon: Parça Kodu ve Miktar odaklı
     const data = [
-      { "Parça Kodu": "P-001", "Ürün Adı": "Örnek Parça", "Miktar": 10, "Birim": "Adet", "Grubu": "Ön Montaj", "Reyon": "A1" },
-      { "Parça Kodu": "H-202", "Ürün Adı": "Hidrolik", "Miktar": 5, "Birim": "Adet", "Grubu": "Hidrolik", "Reyon": "B2" }
+      { "Parça Kodu": "P-00003", "Miktar": 10, "Grup": "Ön Montaj" },
+      { "Parça Kodu": "H-20402", "Miktar": 5, "Grup": "Hidrolik" },
+      { "Parça Kodu": "C-1240", "Miktar": 100, "Grup": "Hırdavat" }
     ];
 
     const ws = XLSX.utils.json_to_sheet(data);
@@ -61,33 +63,84 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
       try {
         const bstr = evt.target?.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
+        
+        if (wb.SheetNames.length === 0) {
+            alert("Excel dosyası boş veya bozuk.");
+            return;
+        }
+
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws);
 
-        const items: OrderItem[] = [];
-        data.forEach((row: any) => {
-            const name = row['Urun'] || row['Ürün'] || row['Aciklama'] || row['Ürün Adı'];
-            const qty = row['Adet'] || row['Miktar'] || row['Qty'];
-            
-            // New Fields
-            const partCode = row['ParcaKodu'] || row['Parça Kodu'] || row['PartCode'];
-            const group = row['Grubu'] || row['Grup'] || row['Group'];
-            const location = row['Reyon'] || row['Raf'] || row['Location'];
+        if (data.length === 0) {
+            alert("Excel sayfasında veri bulunamadı.");
+            return;
+        }
 
-            if (qty) {
-                items.push({ 
-                    product_name: name || partCode || "Bilinmeyen Ürün", 
-                    required_qty: Number(qty), 
-                    unit: row['Birim'] || 'Adet',
-                    part_code: partCode ? String(partCode) : undefined,
-                    group: group ? String(group) : undefined,
-                    location: location ? String(location) : undefined
-                });
+        const items: OrderItem[] = [];
+        
+        data.forEach((row: any) => {
+            // Excel Sütunlarını Oku
+            const partCodeRaw = row['ParcaKodu'] || row['Parça Kodu'] || row['PartCode'] || row['Kod'];
+            const qtyRaw = row['Adet'] || row['Miktar'] || row['Qty'];
+            const nameRaw = row['Urun'] || row['Ürün'] || row['Aciklama'] || row['Ürün Adı'];
+            const groupRaw = row['Grubu'] || row['Grup'] || row['Group'];
+            
+            // Miktar yoksa atla
+            if (!qtyRaw) return;
+
+            let finalName = nameRaw;
+            let finalUnit = row['Birim'] || 'Adet';
+            let finalLocation = row['Reyon'] || row['Raf'] || row['Location'];
+            let finalPartCode = partCodeRaw ? String(partCodeRaw).trim() : undefined;
+
+            // --- AKILLI DOLDURMA (AUTO-FILL) ---
+            // Eğer Parça Kodu varsa, sistemdeki ürünü bul ve eksik bilgileri tamamla
+            if (finalPartCode) {
+                // Parça Kodu ile tam eşleşme ara
+                const systemProduct = products.find(p => p.part_code === finalPartCode);
+                
+                if (systemProduct) {
+                    // Sistemden verileri çek
+                    if (!finalName) finalName = systemProduct.product_name;
+                    finalUnit = systemProduct.unit;
+                    finalLocation = systemProduct.location; // Excel'de reyon yoksa sistemden al
+                }
+            } else if (nameRaw) {
+                // Parça Kodu yoksa İsme göre ara
+                const systemProduct = products.find(p => p.product_name.toLowerCase() === String(nameRaw).toLowerCase());
+                if (systemProduct) {
+                    finalPartCode = systemProduct.part_code;
+                    finalUnit = systemProduct.unit;
+                    finalLocation = systemProduct.location;
+                }
             }
+
+            // Hala isim yoksa Parça Kodunu isim yap veya Bilinmeyen de
+            if (!finalName) finalName = finalPartCode || "Bilinmeyen Ürün";
+
+            items.push({ 
+                product_name: String(finalName), 
+                required_qty: Number(qtyRaw), 
+                unit: finalUnit,
+                part_code: finalPartCode,
+                group: groupRaw ? String(groupRaw) : undefined,
+                location: finalLocation ? String(finalLocation) : undefined
+            });
         });
-        setImportedItems(items);
+
+        if (items.length === 0) {
+            alert("Geçerli sipariş kalemi bulunamadı.");
+        } else {
+            setImportedItems(items);
+        }
+
       } catch (e) {
-          alert("Excel okuma hatası!");
+          console.error(e);
+          alert("Excel okuma hatası! Dosya formatını kontrol edin.");
+      } finally {
+          // Dosya inputunu sıfırla ki aynı dosya tekrar seçilebilsin
+          e.target.value = '';
       }
     };
     reader.readAsBinaryString(file);
@@ -116,7 +169,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
           const match = products.find(p => 
               (item.part_code && p.part_code?.toLowerCase().trim() === item.part_code.toLowerCase().trim()) ||
               p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim() || 
-              p.part_code?.toLowerCase().trim() === item.product_name.toLowerCase().trim()
+              (p.part_code && p.part_code.toLowerCase().trim() === item.product_name.toLowerCase().trim())
           );
           
           const currentStock = match ? match.current_stock : 0;
@@ -135,12 +188,11 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
       const cleanCode = code.trim();
       // Find system product
       const product = products.find(p => 
-          p.short_id === cleanCode || p.barcode === cleanCode || p.part_code === cleanCode
+          String(p.short_id) === cleanCode || p.barcode === cleanCode || p.part_code === cleanCode
       );
 
       if (!product) {
           setScanMessage({ type: 'error', text: `Tanımsız Ürün: ${cleanCode}` });
-          // Play Error Sound
           return;
       }
 
@@ -208,6 +260,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                     </button>
 
                     <div className="space-y-2">
+                        {orders.length === 0 && <div className="text-center text-slate-400 py-4">Henüz sipariş yok.</div>}
                         {orders.map(order => {
                             const { missingCount } = calculateShortages(order.items);
                             return (
@@ -254,7 +307,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                         
                         <div className="flex justify-center">
                              <button onClick={handleDownloadTemplate} className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-                                 <Download size={14} /> Şablonu İndir
+                                 <Download size={14} /> Örnek Şablonu İndir
                              </button>
                         </div>
 
@@ -281,18 +334,18 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                             <button onClick={() => setView('LIST')} className="text-xs font-bold text-slate-500 hover:text-slate-800 mb-1">← Listeye Dön</button>
                             <h3 className="font-bold text-lg dark:text-white">{activeOrder.name}</h3>
                         </div>
-                        <div className="flex gap-2 self-end sm:self-auto">
+                        <div className="flex flex-col sm:flex-row gap-2 self-stretch sm:self-auto">
                             <button 
                                 onClick={() => setShowScanner(true)}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none animate-pulse"
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none animate-pulse"
                             >
-                                <ScanLine size={18} /> Toplama Modu (Barkod)
+                                <ScanLine size={18} /> Toplama Modu
                             </button>
                             
                             {activeOrder.status !== 'COMPLETED' && (
-                                <button onClick={() => { onUpdateOrderStatus(activeOrder.id, 'COMPLETED'); setView('LIST'); }} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold flex items-center gap-2"><Archive size={16}/> <span className="hidden sm:inline">Tamamla</span></button>
+                                <button onClick={() => { onUpdateOrderStatus(activeOrder.id, 'COMPLETED'); setView('LIST'); }} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2"><Archive size={16}/> Tamamla</button>
                             )}
-                            <button onClick={() => { if(confirm("Silinsin mi?")) { onDeleteOrder(activeOrder.id); setView('LIST'); } }} className="px-3 py-2 bg-red-100 text-red-600 rounded-lg"><Trash2 size={18}/></button>
+                            <button onClick={() => { if(confirm("Silinsin mi?")) { onDeleteOrder(activeOrder.id); setView('LIST'); } }} className="px-3 py-2 bg-red-100 text-red-600 rounded-lg flex items-center justify-center"><Trash2 size={18}/></button>
                         </div>
                     </div>
 
