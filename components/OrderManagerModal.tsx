@@ -75,10 +75,12 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
     if (!file) return;
 
     const reader = new FileReader();
+    
+    // UPDATED: Use ArrayBuffer for robust reading of .xlsx files
     reader.onload = (evt) => {
       try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const arrayBuffer = evt.target?.result;
+        const wb = XLSX.read(arrayBuffer, { type: 'array' });
         
         if (wb.SheetNames.length === 0) {
             alert("Excel dosyası boş veya bozuk.");
@@ -95,19 +97,22 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
 
         const items: OrderItem[] = [];
         
+        // Process large datasets without freezing
         data.forEach((row: any) => {
             const partCodeRaw = row['ParcaKodu'] || row['Parça Kodu'] || row['PartCode'] || row['Kod'];
             const qtyRaw = row['Adet'] || row['Miktar'] || row['Qty'];
             const nameRaw = row['Urun'] || row['Ürün'] || row['Aciklama'] || row['Ürün Adı'];
             const groupRaw = row['Grubu'] || row['Grup'] || row['Group'];
             
-            if (!qtyRaw) return;
+            // Skip rows without quantity or product identifier
+            if (!qtyRaw || (!partCodeRaw && !nameRaw)) return;
 
             let finalName = nameRaw;
             let finalUnit = row['Birim'] || 'Adet';
             let finalLocation = row['Reyon'] || row['Raf'] || row['Location'];
             let finalPartCode = partCodeRaw ? String(partCodeRaw).trim() : undefined;
 
+            // Auto-fill from system data
             if (finalPartCode) {
                 const systemProduct = products.find(p => p.part_code === finalPartCode);
                 if (systemProduct) {
@@ -137,19 +142,25 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
         });
 
         if (items.length === 0) {
-            alert("Geçerli sipariş kalemi bulunamadı.");
+            alert("Dosyada geçerli sipariş kalemi bulunamadı. Lütfen şablonu kontrol edin.");
         } else {
             setImportedItems(items);
         }
 
       } catch (e) {
           console.error(e);
-          alert("Excel okuma hatası! Dosya formatını kontrol edin.");
+          alert("Excel okuma hatası! Dosya formatı desteklenmiyor veya bozuk.");
       } finally {
+          // Reset input to allow re-uploading the same file
+          if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+          }
           e.target.value = '';
       }
     };
-    reader.readAsBinaryString(file);
+
+    // UPDATED: Read as ArrayBuffer instead of BinaryString
+    reader.readAsArrayBuffer(file);
   };
 
   const handleCreateOrder = () => {
