@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download, CheckCircle, AlertTriangle, Play, SkipForward, MapPin, Hash, Check, ClipboardList, ArrowLeft } from 'lucide-react';
+import { X, Upload, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download, CheckCircle, AlertTriangle, Play, SkipForward, MapPin, Hash, ClipboardList, ArrowLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, Order, OrderItem } from '../types';
 import BarcodeScanner from './BarcodeScanner';
@@ -17,18 +17,12 @@ interface OrderManagerModalProps {
 const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, products, orders, onSaveOrder, onDeleteOrder, onUpdateOrderStatus }) => {
   const [view, setView] = useState<'LIST' | 'CREATE' | 'DETAIL' | 'GUIDED' | 'GLOBAL_REPORT'>('LIST');
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
-  
-  // Create State
   const [newOrderName, setNewOrderName] = useState('');
   const [importedItems, setImportedItems] = useState<OrderItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Scan Picking State
   const [showScanner, setShowScanner] = useState(false);
   const [pickedCounts, setPickedCounts] = useState<Record<string, number>>({});
   const [scanMessage, setScanMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
-
-  // GUIDED PICKING STATE
   const [guidedItems, setGuidedItems] = useState<OrderItem[]>([]);
   const [guidedIndex, setGuidedIndex] = useState(0);
 
@@ -46,19 +40,13 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
 
   const playSound = (type: 'success' | 'error') => {
       try {
-          const src = type === 'success' 
-            ? 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'
-            : 'https://assets.mixkit.co/active_storage/sfx/2572/2572-preview.mp3';
+          const src = type === 'success' ? 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' : 'https://assets.mixkit.co/active_storage/sfx/2572/2572-preview.mp3';
           new Audio(src).play().catch(() => {});
       } catch (e) {}
   };
 
   const handleDownloadTemplate = () => {
-    const data = [
-      { "Parça Kodu": "P-00003", "Miktar": 10, "Grup": "Ön Montaj" },
-      { "Parça Kodu": "H-20402", "Miktar": 5, "Grup": "Hidrolik" }
-    ];
-
+    const data = [{ "Parça Kodu": "P-00003", "Miktar": 10, "Grup": "Ön Montaj" }];
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "SiparisSablonu");
@@ -68,36 +56,24 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     
-    // SAFE READ: ArrayBuffer
+    // GÜVENLİ OKUMA: ArrayBuffer
     reader.onload = (evt) => {
       try {
         const arrayBuffer = evt.target?.result;
         const wb = XLSX.read(arrayBuffer, { type: 'array' });
-        
-        if (wb.SheetNames.length === 0) {
-            alert("Excel dosyası boş veya bozuk.");
-            return;
-        }
-
+        if (wb.SheetNames.length === 0) { alert("Excel boş."); return; }
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws);
-
-        if (data.length === 0) {
-            alert("Excel sayfasında veri bulunamadı.");
-            return;
-        }
-
-        const items: OrderItem[] = [];
         
+        if (data.length === 0) { alert("Veri yok."); return; }
+        
+        const items: OrderItem[] = [];
         data.forEach((row: any) => {
-            // Flexible Header Reading
             const getVal = (keys: string[]) => {
                 for (const k of keys) {
                     if (row[k] !== undefined) return row[k];
-                    // Case insensitive check
                     const keyLower = k.toLowerCase();
                     const foundKey = Object.keys(row).find(rk => rk.toLowerCase().trim() === keyLower);
                     if (foundKey) return row[foundKey];
@@ -110,7 +86,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
             const nameRaw = getVal(['Urun', 'Ürün', 'Aciklama', 'Ürün Adı']);
             const groupRaw = getVal(['Grubu', 'Grup', 'Group']);
             
-            // Skip empty quantity rows
             if (!qtyRaw) return;
 
             let finalName = nameRaw;
@@ -118,7 +93,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
             let finalLocation = getVal(['Reyon', 'Raf', 'Location']);
             let finalPartCode = partCodeRaw ? String(partCodeRaw).trim() : undefined;
 
-            // Auto-Fill from System Data
+            // Auto-Fill
             if (finalPartCode) {
                 const systemProduct = products.find(p => p.part_code === finalPartCode);
                 if (systemProduct) {
@@ -140,40 +115,21 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
             items.push({ 
                 product_name: String(finalName), 
                 required_qty: Number(qtyRaw), 
-                unit: finalUnit,
-                part_code: finalPartCode,
-                group: groupRaw ? String(groupRaw) : undefined,
-                location: finalLocation ? String(finalLocation) : undefined
+                unit: finalUnit, 
+                part_code: finalPartCode, 
+                group: groupRaw ? String(groupRaw) : undefined, 
+                location: finalLocation ? String(finalLocation) : undefined 
             });
         });
-
-        if (items.length === 0) {
-            alert("Dosyada geçerli sipariş kalemi bulunamadı.");
-        } else {
-            setImportedItems(items);
-        }
-
-      } catch (e) {
-          console.error(e);
-          alert("Excel okuma hatası! Dosya formatı desteklenmiyor.");
-      } finally {
-          if (fileInputRef.current) fileInputRef.current.value = ''; 
-          e.target.value = '';
-      }
+        setImportedItems(items);
+      } catch (e) { alert("Excel okuma hatası."); } finally { if(fileInputRef.current) fileInputRef.current.value = ''; e.target.value = ''; }
     };
-
     reader.readAsArrayBuffer(file);
   };
 
   const handleCreateOrder = () => {
       if (!newOrderName || importedItems.length === 0) return;
-      const newOrder: Order = {
-          id: Math.random().toString(36).substr(2, 9),
-          name: newOrderName,
-          status: 'PENDING',
-          items: importedItems,
-          created_at: new Date().toISOString()
-      };
+      const newOrder: Order = { id: Math.random().toString(36).substr(2, 9), name: newOrderName, status: 'PENDING', items: importedItems, created_at: new Date().toISOString() };
       onSaveOrder(newOrder);
       setNewOrderName('');
       setImportedItems([]);
@@ -183,187 +139,67 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
   const calculateShortages = (items: OrderItem[]) => {
       let missingCount = 0;
       const details = items.map(item => {
-          const match = products.find(p => 
-              (item.part_code && p.part_code?.toLowerCase().trim() === item.part_code.toLowerCase().trim()) ||
-              p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim()
-          );
-          
+          const match = products.find(p => (item.part_code && p.part_code === item.part_code) || p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim());
           const currentStock = match ? match.current_stock : 0;
           const missing = Math.max(0, item.required_qty - currentStock);
           if (missing > 0) missingCount++;
-
           return { ...item, match, missing };
       });
       return { missingCount, details };
   };
 
-  // --- GUIDED PICKING LOGIC ---
-
   const startGuidedPicking = () => {
       if (!activeOrder) return;
-
-      const pendingItems = activeOrder.items.filter(item => {
-          const picked = pickedCounts[item.product_name] || 0;
-          return picked < item.required_qty;
-      });
-
-      if (pendingItems.length === 0) {
-          alert("Bu siparişin tüm kalemleri zaten toplanmış!");
-          return;
-      }
-
-      // Sort: Group -> Location -> Name
+      const pendingItems = activeOrder.items.filter(item => (pickedCounts[item.product_name] || 0) < item.required_qty);
+      if (pendingItems.length === 0) { alert("Sipariş tamamlanmış!"); return; }
       const sortedItems = [...pendingItems].sort((a, b) => {
-          if (a.group && b.group && a.group !== b.group) return a.group.localeCompare(b.group);
-          if (a.group && !b.group) return -1;
-          if (!a.group && b.group) return 1;
-
-          if (a.location && b.location) return a.location.localeCompare(b.location, undefined, { numeric: true, sensitivity: 'base' });
-          if (a.location && !b.location) return -1;
-          if (!a.location && b.location) return 1;
-
-          return a.product_name.localeCompare(b.product_name);
+          if (a.group && !b.group) return -1; if (!a.group && b.group) return 1; if (a.group !== b.group) return (a.group || '').localeCompare(b.group || '');
+          if (a.location && !b.location) return -1; if (!a.location && b.location) return 1; return (a.location || '').localeCompare(b.location || '', undefined, { numeric: true });
       });
-
-      setGuidedItems(sortedItems);
-      setGuidedIndex(0);
-      setView('GUIDED');
-      setShowScanner(true);
-  };
-
-  const skipCurrentItem = () => {
-      if (guidedIndex < guidedItems.length - 1) {
-          setGuidedIndex(prev => prev + 1);
-          setScanMessage(null);
-      } else {
-          alert("Liste sonuna ulaşıldı.");
-          setView('DETAIL');
-          setShowScanner(false);
-      }
+      setGuidedItems(sortedItems); setGuidedIndex(0); setView('GUIDED'); setShowScanner(true);
   };
 
   const handleGuidedScan = (code: string) => {
-      if (view !== 'GUIDED') {
-          handleLegacyScan(code);
-          return;
-      }
-
+      if (view !== 'GUIDED') return;
       const currentTarget = guidedItems[guidedIndex];
       const cleanCode = code.trim();
-
-      const product = products.find(p => 
-          String(p.short_id) === cleanCode || p.barcode === cleanCode || p.part_code === cleanCode
-      );
-
-      if (!product) {
-          playSound('error');
-          setScanMessage({ type: 'error', text: `Sistemde Tanımsız: ${cleanCode}` });
-          return;
-      }
-
-      const isMatch = (currentTarget.part_code && currentTarget.part_code === product.part_code) ||
-                      (currentTarget.product_name.toLowerCase().trim() === product.product_name.toLowerCase().trim());
-
+      const product = products.find(p => String(p.short_id) === cleanCode || p.barcode === cleanCode || p.part_code === cleanCode);
+      if (!product) { playSound('error'); setScanMessage({ type: 'error', text: `Tanımsız: ${cleanCode}` }); return; }
+      const isMatch = (currentTarget.part_code === product.part_code) || (currentTarget.product_name.toLowerCase().trim() === product.product_name.toLowerCase().trim());
       if (isMatch) {
           playSound('success');
-          
           setPickedCounts(prev => {
               const current = prev[currentTarget.product_name] || 0;
               const newVal = current + 1;
-              
               setScanMessage({ type: 'success', text: `DOĞRU: ${product.product_name}` });
-
               if (newVal >= currentTarget.required_qty) {
                   setTimeout(() => {
-                      if (guidedIndex < guidedItems.length - 1) {
-                          setGuidedIndex(prev => prev + 1);
-                          setScanMessage(null);
-                      } else {
-                          alert("Tebrikler! Rota tamamlandı.");
-                          setView('DETAIL');
-                          setShowScanner(false);
-                      }
+                      if (guidedIndex < guidedItems.length - 1) { setGuidedIndex(p => p + 1); setScanMessage(null); } else { alert("Rota tamamlandı."); setView('DETAIL'); setShowScanner(false); }
                   }, 1000);
               }
-              
               return { ...prev, [currentTarget.product_name]: newVal };
           });
-
-      } else {
-          playSound('error');
-          setScanMessage({ 
-              type: 'error', 
-              text: `HATALI ÜRÜN! \nOkunan: ${product.product_name} (${product.location || '?'}) \nHedef: ${currentTarget.product_name}` 
-          });
-      }
+      } else { playSound('error'); setScanMessage({ type: 'error', text: `YANLIŞ ÜRÜN!` }); }
   };
 
-  const handleLegacyScan = (code: string) => {
-      if (!activeOrder) return;
-      const cleanCode = code.trim();
-      const product = products.find(p => String(p.short_id) === cleanCode || p.barcode === cleanCode || p.part_code === cleanCode);
-
-      if (!product) {
-          setScanMessage({ type: 'error', text: `Tanımsız: ${cleanCode}` });
-          return;
-      }
-
-      const orderItem = activeOrder.items.find(item => 
-          (item.part_code && item.part_code === product.part_code) ||
-          item.product_name.toLowerCase().trim() === product.product_name.toLowerCase().trim()
-      );
-
-      if (orderItem) {
-          playSound('success');
-          setPickedCounts(prev => {
-              const current = prev[orderItem.product_name] || 0;
-              if (current >= orderItem.required_qty) {
-                  setScanMessage({ type: 'success', text: `Tamamlandı: ${product.product_name}` });
-                  return prev;
-              }
-              setScanMessage({ type: 'success', text: `Eklendi: ${product.product_name}` });
-              return { ...prev, [orderItem.product_name]: current + 1 };
-          });
-      } else {
-          playSound('error');
-          setScanMessage({ type: 'error', text: `Siparişte YOK: ${product.product_name}` });
-      }
-  };
-
-  // --- GLOBAL REPORT VIEW ---
+  // --- GLOBAL REPORT LOGIC (NEW) ---
   const GlobalReportView = () => {
       const pendingOrders = orders.filter(o => o.status === 'PENDING');
       const aggregatedItems: Record<string, { qty: number, unit: string, name: string, partCode?: string }> = {};
 
       pendingOrders.forEach(o => {
           o.items.forEach(item => {
-              let key = item.part_code || item.product_name;
-              let name = item.product_name;
-              let partCode = item.part_code;
-              let unit = item.unit || 'Adet';
-
-              // Normalize with system data
-              const sysProd = products.find(p =>
-                  (partCode && p.part_code === partCode) ||
-                  p.product_name.toLowerCase().trim() === name.toLowerCase().trim()
-              );
-
-              if (sysProd) {
-                  key = sysProd.part_code || sysProd.product_name;
-                  name = sysProd.product_name;
-                  partCode = sysProd.part_code;
-                  unit = sysProd.unit;
-              }
-
+              // Benzersiz anahtar: Parça Kodu yoksa İsim
+              const key = item.part_code || item.product_name;
               if (!aggregatedItems[key]) {
-                  aggregatedItems[key] = { qty: 0, unit, name, partCode };
+                  aggregatedItems[key] = { qty: 0, unit: item.unit || 'Adet', name: item.product_name, partCode: item.part_code };
               }
               aggregatedItems[key].qty += item.required_qty;
           });
       });
 
       const report = Object.values(aggregatedItems).map(item => {
-          const product = products.find(p => (item.partCode && p.part_code === item.partCode) || p.product_name === item.name);
+          const product = products.find(p => p.part_code === item.partCode || p.product_name === item.name);
           const currentStock = product ? product.current_stock : 0;
           const missing = Math.max(0, item.qty - currentStock);
           return { ...item, currentStock, missing };
@@ -427,273 +263,96 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
     {showScanner && (
         <div className="fixed inset-0 z-[110]">
             <BarcodeScanner 
-                onScanSuccess={view === 'GUIDED' ? handleGuidedScan : handleLegacyScan} 
+                onScanSuccess={view === 'GUIDED' ? handleGuidedScan : () => {}} 
                 onClose={() => setShowScanner(false)} 
             />
-            {scanMessage && (
-                <div className={`absolute bottom-24 left-4 right-4 p-6 rounded-2xl shadow-2xl z-[120] text-center font-black text-lg animate-bounce border-4 ${scanMessage.type === 'success' ? 'bg-green-600 text-white border-green-400' : 'bg-red-600 text-white border-red-400'}`}>
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                        {scanMessage.type === 'success' ? <CheckCircle size={32}/> : <AlertTriangle size={32}/>}
-                        <span>{scanMessage.type === 'success' ? 'BAŞARILI' : 'HATA'}</span>
-                    </div>
-                    <div className="whitespace-pre-wrap font-medium text-base opacity-90">{scanMessage.text}</div>
-                </div>
-            )}
+            {scanMessage && <div className={`absolute bottom-24 left-4 right-4 p-4 text-center font-bold text-white rounded-xl ${scanMessage.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>{scanMessage.text}</div>}
         </div>
     )}
-
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden transition-colors">
-        
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden">
         {view !== 'GUIDED' && view !== 'GLOBAL_REPORT' && (
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700 bg-orange-50 dark:bg-orange-900/20">
-            <h2 className="text-lg font-bold text-orange-800 dark:text-orange-300 flex items-center gap-2">
-                <Package size={24} /> Sipariş Yönetimi
-            </h2>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={24} /></button>
+            <div className="flex items-center justify-between p-4 border-b dark:border-slate-700 bg-orange-50 dark:bg-orange-900/20">
+                <h2 className="text-lg font-bold text-orange-800 dark:text-orange-300 flex items-center gap-2"><Package size={24}/> Sipariş Yönetimi</h2>
+                <button onClick={onClose}><X size={24} className="text-slate-400"/></button>
             </div>
         )}
-
         <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
-            
             {view === 'LIST' && (
                 <div className="p-4 space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <button 
-                            onClick={() => setView('CREATE')}
-                            className="w-full py-4 bg-white dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-500 hover:border-orange-500 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-all flex flex-col items-center justify-center gap-2"
-                        >
-                            <Plus size={32} />
-                            <span className="font-bold">Yeni Sipariş Oluştur</span>
-                        </button>
-                        <button 
-                            onClick={() => setView('GLOBAL_REPORT')}
-                            className="w-full py-4 bg-white dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-500 hover:border-blue-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all flex flex-col items-center justify-center gap-2"
-                        >
-                            <ClipboardList size={32} />
-                            <span className="font-bold">Genel İhtiyaç Raporu</span>
-                        </button>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button onClick={() => setView('CREATE')} className="p-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-orange-500 hover:text-orange-500 flex flex-col items-center gap-2"><Plus size={24}/><span>Yeni Sipariş</span></button>
+                        <button onClick={() => setView('GLOBAL_REPORT')} className="p-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 hover:border-blue-500 hover:text-blue-500 flex flex-col items-center gap-2"><ClipboardList size={24}/><span>Genel İhtiyaç Raporu</span></button>
                     </div>
-
                     <div className="space-y-2">
-                        {orders.length === 0 && <div className="text-center text-slate-400 py-4">Henüz sipariş yok.</div>}
                         {orders.map(order => {
                             const { missingCount } = calculateShortages(order.items);
                             return (
-                                <div key={order.id} onClick={() => { setActiveOrder(order); setView('DETAIL'); setPickedCounts({}); }} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:border-orange-400 cursor-pointer transition-all group">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <h4 className="font-bold text-slate-800 dark:text-white">{order.name}</h4>
-                                            <p className="text-xs text-slate-500">{new Date(order.created_at).toLocaleDateString()} • {order.items.length} Kalem</p>
-                                        </div>
-                                        <div className="flex items-center gap-4">
-                                            {order.status === 'COMPLETED' ? (
-                                                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">Tamamlandı</span>
-                                            ) : (
-                                                missingCount > 0 ? (
-                                                    <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold flex items-center gap-1"><AlertTriangle size={12}/> {missingCount} Eksik</span>
-                                                ) : (
-                                                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold flex items-center gap-1"><CheckCircle size={12}/> Hazır</span>
-                                                )
-                                            )}
-                                            <ChevronRight className="text-slate-300 group-hover:text-orange-500" />
-                                        </div>
-                                    </div>
+                                <div key={order.id} onClick={() => { setActiveOrder(order); setView('DETAIL'); }} className="bg-white dark:bg-slate-800 p-4 rounded-xl border hover:border-orange-400 cursor-pointer flex justify-between items-center">
+                                    <div><h4 className="font-bold dark:text-white">{order.name}</h4><p className="text-xs text-slate-500">{new Date(order.created_at).toLocaleDateString()} • {order.items.length} Kalem</p></div>
+                                    {order.status === 'COMPLETED' ? <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">Tamamlandı</span> : missingCount > 0 ? <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold flex gap-1"><AlertTriangle size={12}/> {missingCount} Eksik</span> : <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">Hazır</span>}
                                 </div>
                             );
                         })}
                     </div>
                 </div>
             )}
-
             {view === 'GLOBAL_REPORT' && <GlobalReportView />}
-
             {view === 'CREATE' && (
-                <div className="p-6 max-w-lg mx-auto">
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm">
-                        <h3 className="font-bold text-lg mb-4 dark:text-white">Yeni Sipariş Yükle</h3>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Sipariş Adı / Müşteri</label>
-                                <input 
-                                    type="text" 
-                                    value={newOrderName} 
-                                    onChange={(e) => setNewOrderName(e.target.value)}
-                                    className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                                    placeholder="Örn: Proje A - Malzeme Listesi"
-                                />
-                            </div>
-                            <div className="flex justify-center">
-                                <button onClick={handleDownloadTemplate} className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
-                                    <Download size={14} /> Örnek Şablonu İndir
-                                </button>
-                            </div>
-                            <div 
-                                onClick={() => fileInputRef.current?.click()}
-                                className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-8 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                            >
-                                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".xlsx,.xls" />
-                                <Upload className="mx-auto text-slate-400 mb-2" />
-                                <p className="text-sm text-slate-600 dark:text-slate-400">{importedItems.length > 0 ? `${importedItems.length} kalem okundu` : 'Excel Listesi Seç'}</p>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => setView('LIST')} className="flex-1 py-3 text-slate-500 font-bold">İptal</button>
-                                <button onClick={handleCreateOrder} disabled={!newOrderName || importedItems.length === 0} className="flex-1 py-3 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700 disabled:opacity-50">Kaydet</button>
-                            </div>
-                        </div>
-                    </div>
+                <div className="p-6 max-w-lg mx-auto bg-white dark:bg-slate-800 rounded-xl m-4 shadow-sm">
+                    <h3 className="font-bold text-lg mb-4 dark:text-white">Yeni Sipariş Yükle</h3>
+                    <input type="text" value={newOrderName} onChange={(e) => setNewOrderName(e.target.value)} className="w-full p-3 border rounded-lg mb-4 dark:bg-slate-700 dark:text-white" placeholder="Sipariş Adı" />
+                    <button onClick={handleDownloadTemplate} className="text-xs text-blue-500 mb-4 block hover:underline">Şablon İndir</button>
+                    <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed p-8 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 mb-4"><input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".xlsx"/><Upload className="mx-auto mb-2 text-slate-400"/><p className="text-sm dark:text-slate-300">{importedItems.length > 0 ? `${importedItems.length} kalem` : 'Excel Seç'}</p></div>
+                    <div className="flex gap-2"><button onClick={() => setView('LIST')} className="flex-1 py-3 text-slate-500">İptal</button><button onClick={handleCreateOrder} disabled={!newOrderName || importedItems.length === 0} className="flex-1 py-3 bg-orange-600 text-white rounded-lg font-bold">Kaydet</button></div>
                 </div>
             )}
-
             {view === 'DETAIL' && activeOrder && (
                 <div className="p-4 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-4 rounded-xl border dark:border-slate-700">
-                        <div>
-                            <button onClick={() => setView('LIST')} className="text-xs font-bold text-slate-500 hover:text-slate-800 mb-1">← Listeye Dön</button>
-                            <h3 className="font-bold text-lg dark:text-white">{activeOrder.name}</h3>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-2 self-stretch sm:self-auto">
-                            {activeOrder.status !== 'COMPLETED' && (
-                                <button 
-                                    onClick={startGuidedPicking}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none animate-pulse"
-                                >
-                                    <Play size={18} /> Rota Başlat
-                                </button>
-                            )}
-                            {activeOrder.status !== 'COMPLETED' && (
-                                <button onClick={() => { onUpdateOrderStatus(activeOrder.id, 'COMPLETED'); setView('LIST'); }} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2"><Archive size={16}/> Tamamla</button>
-                            )}
-                            <button onClick={() => { if(confirm("Silinsin mi?")) { onDeleteOrder(activeOrder.id); setView('LIST'); } }} className="px-3 py-2 bg-red-100 text-red-600 rounded-lg flex items-center justify-center"><Trash2 size={18}/></button>
+                    <div className="flex justify-between bg-white dark:bg-slate-800 p-4 rounded-xl border dark:border-slate-700">
+                        <div><button onClick={() => setView('LIST')} className="text-xs font-bold text-slate-500 mb-1">← Geri</button><h3 className="font-bold dark:text-white">{activeOrder.name}</h3></div>
+                        <div className="flex gap-2">
+                            {activeOrder.status !== 'COMPLETED' && <button onClick={startGuidedPicking} className="px-3 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm flex gap-1"><Play size={16}/> Rota</button>}
+                            {activeOrder.status !== 'COMPLETED' && <button onClick={() => { onUpdateOrderStatus(activeOrder.id, 'COMPLETED'); setView('LIST'); }} className="px-3 py-2 bg-green-600 text-white rounded-lg font-bold text-sm"><Archive size={16}/></button>}
+                            <button onClick={() => { onDeleteOrder(activeOrder.id); setView('LIST'); }} className="px-3 py-2 bg-red-100 text-red-600 rounded-lg"><Trash2 size={16}/></button>
                         </div>
                     </div>
-
-                    <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-medium">
-                                    <tr>
-                                        <th className="p-3 text-left">Parça / Ürün</th>
-                                        <th className="p-3 text-left">Grup / Reyon</th>
-                                        <th className="p-3 text-center">İstenen</th>
-                                        <th className="p-3 text-center">Toplanan</th>
-                                        <th className="p-3 text-center">Stok Durumu</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                    {calculateShortages(activeOrder.items).details.map((item, idx) => {
-                                        const picked = pickedCounts[item.product_name] || 0;
-                                        const isFullyPicked = picked >= item.required_qty;
-                                        return (
-                                            <tr key={idx} className={`transition-colors ${isFullyPicked ? 'bg-green-50 dark:bg-green-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
-                                                <td className="p-4">
-                                                    <div className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                                        {item.product_name}
-                                                        {isFullyPicked && <CheckCircle size={14} className="text-green-600" />}
-                                                    </div>
-                                                    <div className="text-xs text-slate-500 flex flex-col gap-0.5">
-                                                        {item.part_code && <span className="font-mono">Kod: {item.part_code}</span>}
-                                                    </div>
-                                                </td>
-                                                <td className="p-4">
-                                                    {item.group && <div className="text-xs font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded inline-block mb-1">{item.group}</div>}
-                                                    {item.location && <div className="text-xs font-mono text-orange-600 dark:text-orange-400 flex items-center gap-1"><ScanLine size={10}/> {item.location}</div>}
-                                                </td>
-                                                <td className="p-4 text-center font-bold text-slate-700 dark:text-slate-300">{item.required_qty}</td>
-                                                <td className="p-4 text-center">
-                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${picked > 0 ? (isFullyPicked ? 'bg-green-200 text-green-800' : 'bg-blue-100 text-blue-700') : 'bg-slate-100 text-slate-400'}`}>
-                                                        {picked}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-center">
-                                                    {item.missing > 0 ? (
-                                                        <div className="text-red-600 font-bold text-xs bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded inline-block">-{item.missing} Eksik</div>
-                                                    ) : (
-                                                        <div className="text-green-600 font-bold text-xs flex items-center justify-center gap-1"><CheckCircle size={10}/> Stok Var</div>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden border dark:border-slate-700">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 dark:bg-slate-700"><tr><th className="p-3 text-left">Ürün</th><th className="p-3 text-center">İstenen</th><th className="p-3 text-center">Toplanan</th><th className="p-3 text-center">Durum</th></tr></thead>
+                            <tbody>
+                                {calculateShortages(activeOrder.items).details.map((item, idx) => {
+                                    const picked = pickedCounts[item.product_name] || 0;
+                                    return (
+                                        <tr key={idx} className="border-b dark:border-slate-700">
+                                            <td className="p-3 dark:text-white"><div>{item.product_name}</div><div className="text-xs text-slate-500">{item.part_code} | {item.location}</div></td>
+                                            <td className="p-3 text-center font-bold">{item.required_qty}</td>
+                                            <td className="p-3 text-center font-bold text-blue-600">{picked}</td>
+                                            <td className="p-3 text-center">{item.missing > 0 ? <span className="text-red-600 font-bold">-{item.missing}</span> : <span className="text-green-600 font-bold">OK</span>}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             )}
-
             {view === 'GUIDED' && guidedItems.length > 0 && (
-                <div className="h-full flex flex-col bg-slate-900 text-white">
-                    <div className="flex justify-between items-center p-4 bg-slate-800 border-b border-slate-700">
-                        <h2 className="text-xl font-bold flex items-center gap-2 text-blue-400"><Play size={24} fill="currentColor"/> Toplama Modu</h2>
-                        <button onClick={() => { setShowScanner(false); setView('DETAIL'); }} className="px-3 py-1 bg-slate-700 rounded text-sm hover:bg-slate-600">Çıkış</button>
+                <div className="h-full flex flex-col bg-slate-900 text-white text-center p-6 items-center justify-center">
+                    <div className="bg-blue-600 p-6 rounded-2xl mb-8 w-full max-w-sm border-4 border-blue-400 animate-pulse">
+                        <div className="text-sm font-bold uppercase opacity-80 mb-1">HEDEF REYON</div>
+                        <div className="text-5xl font-black">{guidedItems[guidedIndex].location || "BELİRSİZ"}</div>
                     </div>
-
-                    <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                        <div className="mb-2 text-slate-400 uppercase text-xs font-bold tracking-widest">Şu Anki Hedef</div>
-                        
-                        <div className="bg-blue-600 text-white p-6 rounded-2xl shadow-xl shadow-blue-900/50 mb-8 w-full max-w-sm border-4 border-blue-400 animate-pulse">
-                            <div className="flex items-center justify-center gap-2 mb-1 opacity-80">
-                                <MapPin size={20}/>
-                                <span className="text-sm font-bold uppercase">Reyon / Raf</span>
-                            </div>
-                            <div className="text-5xl font-black tracking-tighter">
-                                {guidedItems[guidedIndex].location || "BELİRSİZ"}
-                            </div>
-                            {guidedItems[guidedIndex].group && (
-                                <div className="mt-2 inline-block bg-blue-800 px-3 py-1 rounded-full text-xs font-bold">
-                                    Grup: {guidedItems[guidedIndex].group}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="space-y-2 mb-8">
-                            <h3 className="text-2xl font-bold text-white leading-tight">
-                                {guidedItems[guidedIndex].product_name}
-                            </h3>
-                            <div className="flex items-center justify-center gap-2">
-                                <div className="bg-slate-800 px-3 py-1 rounded text-sm font-mono text-orange-400 font-bold border border-slate-700 flex items-center gap-2">
-                                    <Hash size={14}/>
-                                    {guidedItems[guidedIndex].part_code || 'Kodsuz'}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex items-end gap-2 mb-8">
-                            <span className="text-6xl font-black text-green-400">
-                                {pickedCounts[guidedItems[guidedIndex].product_name] || 0}
-                            </span>
-                            <span className="text-2xl font-bold text-slate-500 mb-2">/</span>
-                            <span className="text-4xl font-bold text-slate-300 mb-1">
-                                {guidedItems[guidedIndex].required_qty}
-                            </span>
-                            <span className="text-sm text-slate-500 mb-2 ml-1">{guidedItems[guidedIndex].unit}</span>
-                        </div>
-
-                        <div className="w-full max-w-sm bg-slate-800 h-2 rounded-full overflow-hidden mb-6">
-                            <div 
-                                className="h-full bg-green-500 transition-all duration-300"
-                                style={{ width: `${((guidedIndex) / guidedItems.length) * 100}%` }}
-                            ></div>
-                        </div>
-                        <p className="text-xs text-slate-500 mb-6">
-                            İlerleme: {guidedIndex + 1} / {guidedItems.length}
-                        </p>
-
-                        <div className="flex gap-4 w-full max-w-sm">
-                            <button 
-                                onClick={skipCurrentItem}
-                                className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-slate-300 flex items-center justify-center gap-2"
-                            >
-                                <SkipForward size={20}/> Atla
-                            </button>
-                            <button 
-                                onClick={() => setShowScanner(true)}
-                                className="flex-[2] py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-bold text-white shadow-lg shadow-blue-900/50 flex items-center justify-center gap-2"
-                            >
-                                <ScanLine size={20}/> OKUT
-                            </button>
-                        </div>
+                    <h3 className="text-2xl font-bold mb-2">{guidedItems[guidedIndex].product_name}</h3>
+                    <div className="font-mono text-orange-400 font-bold mb-8 text-xl">{guidedItems[guidedIndex].part_code}</div>
+                    <div className="flex items-end gap-2 mb-8">
+                        <span className="text-6xl font-black text-green-400">{pickedCounts[guidedItems[guidedIndex].product_name] || 0}</span>
+                        <span className="text-2xl text-slate-500">/</span>
+                        <span className="text-4xl font-bold text-slate-300">{guidedItems[guidedIndex].required_qty}</span>
+                    </div>
+                    <div className="flex gap-4 w-full max-w-sm">
+                        <button onClick={() => { if(guidedIndex < guidedItems.length - 1) setGuidedIndex(p => p+1); else { alert("Bitti"); setView('DETAIL'); setShowScanner(false); } }} className="flex-1 py-4 bg-slate-800 rounded-xl font-bold">Atla</button>
+                        <button onClick={() => setShowScanner(true)} className="flex-[2] py-4 bg-blue-600 rounded-xl font-bold shadow-lg">OKUT</button>
                     </div>
                 </div>
             )}
@@ -703,5 +362,4 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
     </>
   );
 };
-
 export default OrderManagerModal;

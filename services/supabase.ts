@@ -92,6 +92,36 @@ export const saveToSupabase = async (url: string, key: string, products: Product
   } catch (e: any) { return { success: false, message: e.message }; }
 };
 
+export const deleteMissingRecords = async (url: string, key: string, localProducts: Product[], localTransactions: Transaction[]) => {
+    try {
+        const client = initSupabase(url, key);
+        if (!client) return;
+
+        // 1. Products
+        const remoteProducts = await fetchAllData(client, 'products');
+        const localProductIds = new Set(localProducts.map(p => p.id));
+        const productsToDelete = remoteProducts.filter((p: any) => !localProductIds.has(p.id)).map((p: any) => p.id);
+        
+        if (productsToDelete.length > 0) {
+            for (let i = 0; i < productsToDelete.length; i += 500) {
+                await client.from('products').delete().in('id', productsToDelete.slice(i, i + 500));
+            }
+        }
+
+        // 2. Transactions
+        const remoteTransactions = await fetchAllData(client, 'transactions');
+        const localTransactionIds = new Set(localTransactions.map(t => t.id));
+        const transactionsToDelete = remoteTransactions.filter((t: any) => !localTransactionIds.has(t.id)).map((t: any) => t.id);
+
+        if (transactionsToDelete.length > 0) {
+            for (let i = 0; i < transactionsToDelete.length; i += 500) {
+                await client.from('transactions').delete().in('id', transactionsToDelete.slice(i, i + 500));
+            }
+        }
+
+    } catch (e) { console.error("Delete sync error:", e); }
+};
+
 export const clearDatabase = async (url: string, key: string) => {
     try {
         const client = initSupabase(url, key);
