@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download, CheckCircle, AlertTriangle, Play, SkipForward, MapPin, Hash, Check, ClipboardList, ArrowLeft } from 'lucide-react';
+import { X, Upload, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download, CheckCircle, AlertTriangle, Play, SkipForward, MapPin, Hash, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, Order, OrderItem } from '../types';
 import BarcodeScanner from './BarcodeScanner';
@@ -16,7 +16,7 @@ interface OrderManagerModalProps {
 }
 
 const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, products, orders, onSaveOrder, onDeleteOrder, onUpdateOrderStatus }) => {
-  const [view, setView] = useState<'LIST' | 'CREATE' | 'DETAIL' | 'GUIDED' | 'NEEDS_REPORT'>('LIST');
+  const [view, setView] = useState<'LIST' | 'CREATE' | 'DETAIL' | 'GUIDED'>('LIST');
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   
   // Create State
@@ -375,14 +375,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                         <span className="font-bold">Yeni Sipariş Oluştur (Excel)</span>
                     </button>
 
-                    <button 
-                        onClick={() => setView('NEEDS_REPORT')}
-                        className="w-full py-4 bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 dark:border-purple-700 rounded-xl text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 hover:border-purple-400 transition-all flex items-center justify-center gap-3"
-                    >
-                        <ClipboardList size={24} />
-                        <span className="font-bold">Genel İhtiyaç Raporu</span>
-                    </button>
-
                     <div className="space-y-2">
                         {orders.length === 0 && <div className="text-center text-slate-400 py-4">Henüz sipariş yok.</div>}
                         {orders.map(order => {
@@ -411,171 +403,6 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                             );
                         })}
                     </div>
-                </div>
-            )}
-
-            {view === 'NEEDS_REPORT' && (
-                <div className="p-4 space-y-4">
-                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-4 rounded-xl border dark:border-slate-700">
-                        <button 
-                            onClick={() => setView('LIST')} 
-                            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                        >
-                            <ArrowLeft size={20} className="text-slate-500 dark:text-slate-400" />
-                        </button>
-                        <div>
-                            <h3 className="font-bold text-lg text-purple-800 dark:text-purple-300 flex items-center gap-2">
-                                <ClipboardList size={22} />
-                                Genel İhtiyaç Raporu
-                            </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                Tüm aktif siparişlerdeki eksik ürünler
-                            </p>
-                        </div>
-                    </div>
-
-                    {(() => {
-                        const pendingOrders = orders.filter(o => o.status === 'PENDING');
-                        
-                        if (pendingOrders.length === 0) {
-                            return (
-                                <div className="bg-white dark:bg-slate-800 p-8 rounded-xl border dark:border-slate-700 text-center">
-                                    <div className="text-slate-400 dark:text-slate-500 mb-2">
-                                        <ClipboardList size={48} className="mx-auto opacity-50" />
-                                    </div>
-                                    <p className="text-slate-500 dark:text-slate-400">
-                                        Aktif (bekleyen) sipariş bulunmuyor.
-                                    </p>
-                                </div>
-                            );
-                        }
-
-                        const combinedNeeds: Record<string, { 
-                            product_name: string; 
-                            part_code?: string; 
-                            total_required: number; 
-                            current_stock: number;
-                            unit: string;
-                        }> = {};
-
-                        pendingOrders.forEach(order => {
-                            order.items.forEach(item => {
-                                const key = item.part_code?.toLowerCase().trim() || item.product_name.toLowerCase().trim();
-                                
-                                const matchedProduct = products.find(p => 
-                                    (item.part_code && p.part_code?.toLowerCase().trim() === item.part_code.toLowerCase().trim()) ||
-                                    p.product_name.toLowerCase().trim() === item.product_name.toLowerCase().trim()
-                                );
-
-                                if (combinedNeeds[key]) {
-                                    combinedNeeds[key].total_required += item.required_qty;
-                                } else {
-                                    combinedNeeds[key] = {
-                                        product_name: matchedProduct?.product_name || item.product_name,
-                                        part_code: matchedProduct?.part_code || item.part_code,
-                                        total_required: item.required_qty,
-                                        current_stock: matchedProduct?.current_stock || 0,
-                                        unit: matchedProduct?.unit || item.unit || 'Adet'
-                                    };
-                                }
-                            });
-                        });
-
-                        const shortageList = Object.values(combinedNeeds)
-                            .map(item => ({
-                                ...item,
-                                missing: Math.max(0, item.total_required - item.current_stock)
-                            }))
-                            .filter(item => item.missing > 0)
-                            .sort((a, b) => b.missing - a.missing);
-
-                        if (shortageList.length === 0) {
-                            return (
-                                <div className="bg-green-50 dark:bg-green-900/20 p-8 rounded-xl border border-green-200 dark:border-green-700 text-center">
-                                    <div className="text-green-500 mb-2">
-                                        <CheckCircle size={48} className="mx-auto" />
-                                    </div>
-                                    <p className="text-green-700 dark:text-green-300 font-bold">
-                                        Tüm siparişler için yeterli stok mevcut!
-                                    </p>
-                                    <p className="text-green-600 dark:text-green-400 text-sm mt-1">
-                                        {pendingOrders.length} aktif sipariş kontrol edildi.
-                                    </p>
-                                </div>
-                            );
-                        }
-
-                        const totalMissingItems = shortageList.length;
-                        const totalMissingQty = shortageList.reduce((sum, item) => sum + item.missing, 0);
-
-                        return (
-                            <>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl border border-purple-200 dark:border-purple-700">
-                                        <div className="text-2xl font-black text-purple-700 dark:text-purple-300">{pendingOrders.length}</div>
-                                        <div className="text-xs text-purple-600 dark:text-purple-400">Aktif Sipariş</div>
-                                    </div>
-                                    <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-200 dark:border-red-700">
-                                        <div className="text-2xl font-black text-red-700 dark:text-red-300">{totalMissingItems}</div>
-                                        <div className="text-xs text-red-600 dark:text-red-400">Eksik Ürün Çeşidi</div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
-                                    <div className="bg-red-50 dark:bg-red-900/20 px-4 py-3 border-b border-red-100 dark:border-red-800">
-                                        <h4 className="font-bold text-red-800 dark:text-red-300 flex items-center gap-2">
-                                            <AlertTriangle size={18} />
-                                            Genel Eksik Listesi
-                                        </h4>
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-medium">
-                                                <tr>
-                                                    <th className="p-3 text-left">Ürün Adı</th>
-                                                    <th className="p-3 text-left">Parça Kodu</th>
-                                                    <th className="p-3 text-center">Toplam İhtiyaç</th>
-                                                    <th className="p-3 text-center">Mevcut Stok</th>
-                                                    <th className="p-3 text-center">Eksik Miktar</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                                {shortageList.map((item, idx) => (
-                                                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                                        <td className="p-4">
-                                                            <div className="font-bold text-slate-800 dark:text-white">
-                                                                {item.product_name}
-                                                            </div>
-                                                        </td>
-                                                        <td className="p-4">
-                                                            <span className="font-mono text-xs text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">
-                                                                {item.part_code || '-'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-4 text-center">
-                                                            <span className="font-bold text-purple-700 dark:text-purple-300">
-                                                                {item.total_required} {item.unit}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-4 text-center">
-                                                            <span className="font-medium text-slate-600 dark:text-slate-400">
-                                                                {item.current_stock} {item.unit}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-4 text-center">
-                                                            <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-xs font-bold">
-                                                                -{item.missing} {item.unit}
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </>
-                        );
-                    })()}
                 </div>
             )}
 

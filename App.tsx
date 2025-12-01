@@ -110,17 +110,14 @@ function App() {
 
   // UPDATED SAVE DATA
   const saveData = useCallback((newProducts: Product[], newTransactions: Transaction[], newOrders?: Order[], silent: boolean = false) => {
-      // Determine orders to sync - use explicit value if provided, otherwise current state
-      const ordersToSync = newOrders !== undefined ? newOrders : orders;
-      
       try {
         setProducts(newProducts);
         setTransactions(newTransactions);
-        if (newOrders !== undefined) setOrders(newOrders);
+        if (newOrders) setOrders(newOrders);
 
         localStorage.setItem('depopro_products', JSON.stringify(newProducts));
         localStorage.setItem('depopro_transactions', JSON.stringify(newTransactions));
-        if (newOrders !== undefined) localStorage.setItem('depopro_orders', JSON.stringify(newOrders));
+        if (newOrders) localStorage.setItem('depopro_orders', JSON.stringify(newOrders));
 
       } catch (err: any) {
         if (err.name === 'QuotaExceededError') alert("HATA: Tarayıcı hafızası dolu!");
@@ -128,7 +125,7 @@ function App() {
       }
 
       if (cloudConfig?.supabaseUrl && cloudConfig?.supabaseKey) {
-          performCloudSave(newProducts, newTransactions, ordersToSync, silent);
+          performCloudSave(newProducts, newTransactions, newOrders || orders, silent);
       }
   }, [cloudConfig, orders]);
 
