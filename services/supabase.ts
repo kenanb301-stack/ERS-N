@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { Product, Transaction, Order } from '../types';
 
@@ -71,7 +70,6 @@ export const loadFromSupabase = async (url: string, key: string) => {
     const products = await fetchAllData(client, 'products');
     const transactions = await fetchAllData(client, 'transactions');
     
-    // Try loading orders, if table doesn't exist yet, return empty
     let orders: Order[] = [];
     try {
         orders = await fetchAllData(client, 'orders');

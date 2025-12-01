@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, Suspense, lazy, useCallback } from 'react';
 import { LayoutDashboard, Package, History, Plus, Menu, X, FileSpreadsheet, AlertTriangle, Moon, Sun, Printer, ScanLine, LogOut, BarChart3, Database as DatabaseIcon, Cloud, UploadCloud, DownloadCloud, RefreshCw, CheckCircle2, Loader2, WifiOff, Info, MoreHorizontal, Settings } from 'lucide-react';
 import Dashboard from './components/Dashboard';
@@ -27,7 +26,7 @@ const BarcodePrinterModal = lazy(() => import('./components/BarcodePrinterModal'
 const generateId = () => Math.random().toString(36).substring(2, 11);
 const generateShortId = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const APP_VERSION = "2.1.0"; // Major Update: Product Details
+const APP_VERSION = "2.1.0";
 
 function App() {
   // --- AUTH STATE ---
@@ -325,25 +324,15 @@ function App() {
           <BarcodeScanner 
             onScanSuccess={(code) => {
                 setIsGlobalScannerOpen(false);
-                // Check if code corresponds to a product for opening detail view
                 const product = products.find(p => String(p.short_id) === code.trim() || p.barcode === code.trim() || p.part_code === code.trim());
                 if (product) {
-                    // Option to view details or proceed to transaction
                     if (confirm(`Ürün Bulundu: ${product.product_name}\n\nTamam: İşlem Yap\nİptal: Detay Gör`)) {
                         setEditingTransaction(null);
                         setPreSelectedBarcode(code);
                         setModalType(TransactionType.IN);
                         setIsModalOpen(true);
                     } else {
-                        // Open Detail View
-                        // Needs state management for detail modal
-                        // For now, we can just open the modal directly if we had the prop, but let's assume we want detail modal to open
-                        // Since we can't easily pass product to the new modal from here without state, 
-                        // let's just open the modal and let it handle the code if passed, or just open scanner
-                        // Actually, better logic: 
-                        // Scan -> Modal Opens -> Modal finds product.
                         setIsProductDetailOpen(true);
-                        // Ideally pass the code to pre-load, but the new modal has scanner too.
                     }
                 } else {
                     alert("Ürün bulunamadı. Yeni giriş yapabilirsiniz.");
@@ -369,7 +358,6 @@ function App() {
               </div>
           </div>
           <div className="flex items-center gap-3">
-              {/* Cloud Status Icon */}
               {cloudConfig?.supabaseUrl ? (
                   syncStatus === 'SYNCING' ? <RefreshCw size={18} className="animate-spin text-blue-500" /> :
                   syncStatus === 'SUCCESS' ? <Cloud size={18} className="text-green-500" /> :
@@ -453,7 +441,6 @@ function App() {
         </nav>
 
         <div className="p-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
-            {/* Sync Status Desktop */}
             {cloudConfig?.supabaseUrl && (
                 <div className="flex items-center justify-between px-3 py-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                     <div className="flex items-center gap-2">
@@ -462,7 +449,6 @@ function App() {
                          <Cloud size={14} className="text-red-500" />}
                         <span>{syncStatus === 'SYNCING' ? 'Eşitleniyor...' : syncStatus === 'SUCCESS' ? 'Eşitlendi' : 'Bağlantı Yok'}</span>
                     </div>
-                    {/* Force Sync Button */}
                     <button onClick={() => performCloudLoad(false, true)} className="hover:text-blue-500" title="Zorla İndir"><DownloadCloud size={14}/></button>
                 </div>
             )}
@@ -479,7 +465,6 @@ function App() {
       <main className="flex-1 p-4 md:p-8 overflow-y-auto h-auto min-h-screen pt-20 pb-24 md:pt-8 md:pb-8">
         <Suspense fallback={<div className="flex justify-center p-10"><Loader2 className="animate-spin"/></div>}>
             <div className="max-w-5xl mx-auto">
-                {/* View Switcher */}
                 {currentView === 'DASHBOARD' && (
                     <Dashboard 
                         products={products} 
@@ -502,7 +487,6 @@ function App() {
                         onOpenCloudSetup={() => setIsCloudSetupOpen(true)}
                     />
                 )}
-                {/* ... Other Views ... */}
                 {currentView === 'ANALYTICS' && <Analytics products={products} transactions={transactions} />}
                 {currentView === 'INVENTORY' && (
                     <InventoryList 
@@ -541,7 +525,6 @@ function App() {
         </Suspense>
       </main>
 
-      {/* --- MOBILE BOTTOM NAV --- */}
       <div className="md:hidden fixed bottom-0 w-full bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-around items-center py-2 px-2 z-30 pb-safe">
           {navItems.map(item => (
               <button
@@ -553,7 +536,6 @@ function App() {
                   <span className="text-[10px] font-medium">{item.label}</span>
               </button>
           ))}
-          {/* Floating Scan Button in Bottom Nav */}
           <button 
             onClick={() => setIsGlobalScannerOpen(true)}
             className="absolute -top-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white p-3 rounded-full shadow-lg shadow-blue-300 dark:shadow-blue-900 border-4 border-slate-50 dark:border-slate-900 active:scale-95 transition-transform"
@@ -562,7 +544,6 @@ function App() {
           </button>
       </div>
 
-      {/* Modals */}
       {currentUser.role === 'ADMIN' && (
         <>
             <TransactionModal 

@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download, CheckCircle, AlertTriangle, Play, SkipForward, MapPin, Hash, Check } from 'lucide-react';
+import { X, Upload, Package, Trash2, Archive, Plus, ChevronRight, AlertCircle, ScanLine, Search, Download, CheckCircle, AlertTriangle, Play, SkipForward, MapPin, Hash, Check, ClipboardList, ArrowLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Product, Order, OrderItem } from '../types';
 import BarcodeScanner from './BarcodeScanner';
@@ -16,7 +15,7 @@ interface OrderManagerModalProps {
 }
 
 const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, products, orders, onSaveOrder, onDeleteOrder, onUpdateOrderStatus }) => {
-  const [view, setView] = useState<'LIST' | 'CREATE' | 'DETAIL' | 'GUIDED'>('LIST');
+  const [view, setView] = useState<'LIST' | 'CREATE' | 'DETAIL' | 'GUIDED' | 'GLOBAL_REPORT'>('LIST');
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   
   // Create State
@@ -331,6 +330,98 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
       }
   };
 
+  // --- GLOBAL REPORT VIEW ---
+  const GlobalReportView = () => {
+      const pendingOrders = orders.filter(o => o.status === 'PENDING');
+      const aggregatedItems: Record<string, { qty: number, unit: string, name: string, partCode?: string }> = {};
+
+      pendingOrders.forEach(o => {
+          o.items.forEach(item => {
+              let key = item.part_code || item.product_name;
+              let name = item.product_name;
+              let partCode = item.part_code;
+              let unit = item.unit || 'Adet';
+
+              // Normalize with system data
+              const sysProd = products.find(p =>
+                  (partCode && p.part_code === partCode) ||
+                  p.product_name.toLowerCase().trim() === name.toLowerCase().trim()
+              );
+
+              if (sysProd) {
+                  key = sysProd.part_code || sysProd.product_name;
+                  name = sysProd.product_name;
+                  partCode = sysProd.part_code;
+                  unit = sysProd.unit;
+              }
+
+              if (!aggregatedItems[key]) {
+                  aggregatedItems[key] = { qty: 0, unit, name, partCode };
+              }
+              aggregatedItems[key].qty += item.required_qty;
+          });
+      });
+
+      const report = Object.values(aggregatedItems).map(item => {
+          const product = products.find(p => (item.partCode && p.part_code === item.partCode) || p.product_name === item.name);
+          const currentStock = product ? product.current_stock : 0;
+          const missing = Math.max(0, item.qty - currentStock);
+          return { ...item, currentStock, missing };
+      }).sort((a, b) => b.missing - a.missing);
+
+      return (
+          <div className="p-4 bg-white dark:bg-slate-900 h-full overflow-y-auto">
+              <div className="flex items-center gap-4 mb-6">
+                  <button onClick={() => setView('LIST')} className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
+                      <ArrowLeft size={18} /> Geri Dön
+                  </button>
+                  <h3 className="text-xl font-bold dark:text-white">Genel İhtiyaç Raporu (Tüm Siparişler)</h3>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-sm">
+                  <table className="w-full text-sm">
+                      <thead className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                          <tr>
+                              <th className="p-3 text-left">Ürün / Parça</th>
+                              <th className="p-3 text-center">Toplam İhtiyaç</th>
+                              <th className="p-3 text-center">Eldeki Stok</th>
+                              <th className="p-3 text-center">Durum</th>
+                          </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                          {report.map((row, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                  <td className="p-3">
+                                      <div className="font-bold text-slate-800 dark:text-white">{row.name}</div>
+                                      <div className="text-xs text-slate-500 font-mono">{row.partCode || '-'}</div>
+                                  </td>
+                                  <td className="p-3 text-center font-bold text-slate-700 dark:text-slate-300">{row.qty} {row.unit}</td>
+                                  <td className="p-3 text-center text-slate-500 dark:text-slate-400">{row.currentStock} {row.unit}</td>
+                                  <td className="p-3 text-center">
+                                      {row.missing > 0 ? (
+                                          <span className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-3 py-1 rounded-full text-xs font-bold shadow-sm inline-block">
+                                              -{row.missing} {row.unit} EKSİK
+                                          </span>
+                                      ) : (
+                                          <span className="text-green-600 dark:text-green-400 font-bold text-xs flex items-center justify-center gap-1">
+                                              <CheckCircle size={14}/> Yeterli
+                                          </span>
+                                      )}
+                                  </td>
+                              </tr>
+                          ))}
+                          {report.length === 0 && (
+                              <tr>
+                                  <td colSpan={4} className="p-8 text-center text-slate-400">Bekleyen sipariş veya ihtiyaç bulunamadı.</td>
+                              </tr>
+                          )}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      );
+  };
+
   return (
     <>
     {showScanner && (
@@ -354,7 +445,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden transition-colors">
         
-        {view !== 'GUIDED' && (
+        {view !== 'GUIDED' && view !== 'GLOBAL_REPORT' && (
             <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-700 bg-orange-50 dark:bg-orange-900/20">
             <h2 className="text-lg font-bold text-orange-800 dark:text-orange-300 flex items-center gap-2">
                 <Package size={24} /> Sipariş Yönetimi
@@ -367,13 +458,22 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
             
             {view === 'LIST' && (
                 <div className="p-4 space-y-4">
-                    <button 
-                        onClick={() => setView('CREATE')}
-                        className="w-full py-4 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-500 hover:border-orange-500 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-all flex flex-col items-center justify-center gap-2"
-                    >
-                        <Plus size={32} />
-                        <span className="font-bold">Yeni Sipariş Oluştur (Excel)</span>
-                    </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <button 
+                            onClick={() => setView('CREATE')}
+                            className="w-full py-4 bg-white dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-500 hover:border-orange-500 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/10 transition-all flex flex-col items-center justify-center gap-2"
+                        >
+                            <Plus size={32} />
+                            <span className="font-bold">Yeni Sipariş Oluştur</span>
+                        </button>
+                        <button 
+                            onClick={() => setView('GLOBAL_REPORT')}
+                            className="w-full py-4 bg-white dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-500 hover:border-blue-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all flex flex-col items-center justify-center gap-2"
+                        >
+                            <ClipboardList size={32} />
+                            <span className="font-bold">Genel İhtiyaç Raporu</span>
+                        </button>
+                    </div>
 
                     <div className="space-y-2">
                         {orders.length === 0 && <div className="text-center text-slate-400 py-4">Henüz sipariş yok.</div>}
@@ -405,6 +505,8 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
                     </div>
                 </div>
             )}
+
+            {view === 'GLOBAL_REPORT' && <GlobalReportView />}
 
             {view === 'CREATE' && (
                 <div className="p-6 max-w-lg mx-auto">
