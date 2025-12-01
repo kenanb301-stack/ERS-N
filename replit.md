@@ -49,9 +49,24 @@ DepoPro is a comprehensive inventory management web application built with React
 - **Dark Mode:** Toggle between light/dark themes
 - **PWA Support:** Service worker for offline capability
 
-## Recent Changes (Replit Setup)
+## Recent Changes
 
-### December 1, 2025
+### December 1, 2025 - Feature Updates
+- **Cloud Sync Fix (App.tsx):** 
+  - Improved `saveData` function to properly handle order synchronization
+  - Changed from `newOrders || orders` to explicit undefined check
+  - Orders are now correctly synced to Supabase when added, updated, or deleted
+
+- **General Needs Report (OrderManagerModal.tsx):**
+  - Added new "Genel İhtiyaç Raporu" (General Needs Report) feature
+  - Scans all active (PENDING) orders
+  - Combines same products across multiple orders
+  - Compares total needs with current stock
+  - Shows "Genel Eksik Listesi" (General Missing List) with shortages
+  - Full dark mode support
+  - Turkish language UI
+
+### December 1, 2025 - Replit Setup
 - Installed Node.js 20 runtime
 - Configured Vite dev server:
   - Host: `0.0.0.0` (required for Replit)
