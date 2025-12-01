@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Product, Transaction, TransactionType } from '../types';
-import { TrendingUp, BarChart3, Hexagon, Archive, Map, Activity, Zap } from 'lucide-react';
+import { TrendingUp, BarChart3, Hexagon, Archive, Map, Activity, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface AnalyticsProps {
   products: Product[];
@@ -10,6 +10,7 @@ interface AnalyticsProps {
 
 const Analytics: React.FC<AnalyticsProps> = ({ products, transactions }) => {
   const [trendRange, setTrendRange] = useState<7 | 14 | 30>(7);
+  const [expandedABC, setExpandedABC] = useState<'A' | 'B' | 'C' | null>(null);
 
   // --- 1. KPI ---
   const criticalStockCount = products.filter(p => p.current_stock <= p.min_stock_level).length;
@@ -57,20 +58,51 @@ const Analytics: React.FC<AnalyticsProps> = ({ products, transactions }) => {
       const totalOps = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
       let accum = 0;
       let countA = 0, countB = 0, countC = 0;
+      const itemsA: typeof sortedProducts = [];
+      const itemsB: typeof sortedProducts = [];
+      const itemsC: typeof sortedProducts = [];
 
       // Kümülatif toplama göre sınıflandır
       sortedProducts.forEach(p => {
           accum += p.count;
           const pct = (accum / totalOps) * 100;
-          if (pct <= 80) countA++; // İşlemlerin %80'ini oluşturanlar (A)
-          else if (pct <= 95) countB++; // Sonraki %15 (B)
-          else countC++; // Son %5 (C) - Çok nadir işlem görenler
+          if (pct <= 80) { countA++; itemsA.push(p); }
+          else if (pct <= 95) { countB++; itemsB.push(p); }
+          else { countC++; itemsC.push(p); }
       });
 
-      return { countA, countB, countC };
+      return { countA, countB, countC, itemsA, itemsB, itemsC, allSorted: sortedProducts };
   }, [products, transactions]);
 
-  // --- 5. LOCATION HEATMAP ---
+  // --- 5. EN ÇOK HARCANAN PARÇALAR (QUANTITY BAZLI) ---
+  const topSpentItems = useMemo(() => {
+      const spent: Record<string, number> = {};
+      transactions.filter(t => t.type === TransactionType.OUT).forEach(t => {
+          spent[t.product_id] = (spent[t.product_id] || 0) + t.quantity;
+      });
+      
+      return products
+          .map(p => ({ ...p, qty_spent: spent[p.id] || 0 }))
+          .filter(p => p.qty_spent > 0)
+          .sort((a, b) => b.qty_spent - a.qty_spent)
+          .slice(0, 10);
+  }, [products, transactions]);
+
+  // --- 6. HAMMADDE ANALİZİ ---
+  const materialAnalysis = useMemo(() => {
+      const materials: Record<string, { count: number; products: string[] }> = {};
+      products.forEach(p => {
+          const mat = p.material || 'Belirtilmemiş';
+          if (!materials[mat]) materials[mat] = { count: 0, products: [] };
+          materials[mat].count++;
+          materials[mat].products.push(p.product_name);
+      });
+      return Object.entries(materials)
+          .map(([name, data]) => ({ name, ...data }))
+          .sort((a, b) => b.count - a.count);
+  }, [products]);
+
+  // --- 7. LOCATION HEATMAP ---
   const locationStats = useMemo(() => {
       const stats: Record<string, number> = {};
       products.forEach(p => {
@@ -138,18 +170,56 @@ const Analytics: React.FC<AnalyticsProps> = ({ products, transactions }) => {
                     <div style={{width: `${(abcAnalysis.countC / products.length) * 100}%`}} className="bg-slate-300 dark:bg-slate-600"></div>
                 </div>
                 <div className="space-y-2 text-sm">
-                    <div className="flex justify-between items-center p-2 rounded bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800">
+                    <button onClick={() => setExpandedABC(expandedABC === 'A' ? null : 'A')} className="w-full flex justify-between items-center p-2 rounded bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/20">
                         <span className="font-bold text-emerald-800 dark:text-emerald-300">A Grubu (Çok Hareketli)</span>
-                        <span className="font-black text-emerald-600">{abcAnalysis.countA}</span>
-                    </div>
-                    <div className="flex justify-between items-center p-2 rounded bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800">
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-emerald-600">{abcAnalysis.countA}</span>
+                            {expandedABC === 'A' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </div>
+                    </button>
+                    {expandedABC === 'A' && (
+                        <div className="ml-2 space-y-1 max-h-48 overflow-y-auto">
+                            {abcAnalysis.itemsA.map(p => (
+                                <div key={p.id} className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded text-xs text-emerald-900 dark:text-emerald-200">
+                                    <span className="font-bold">{p.product_name}</span> - İşlem: {p.count}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    
+                    <button onClick={() => setExpandedABC(expandedABC === 'B' ? null : 'B')} className="w-full flex justify-between items-center p-2 rounded bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/20">
                         <span className="font-bold text-blue-800 dark:text-blue-300">B Grubu (Orta)</span>
-                        <span className="font-black text-blue-600">{abcAnalysis.countB}</span>
-                    </div>
-                    <div className="flex justify-between items-center p-2 rounded bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600">
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-blue-600">{abcAnalysis.countB}</span>
+                            {expandedABC === 'B' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </div>
+                    </button>
+                    {expandedABC === 'B' && (
+                        <div className="ml-2 space-y-1 max-h-48 overflow-y-auto">
+                            {abcAnalysis.itemsB.map(p => (
+                                <div key={p.id} className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded text-xs text-blue-900 dark:text-blue-200">
+                                    <span className="font-bold">{p.product_name}</span> - İşlem: {p.count}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    
+                    <button onClick={() => setExpandedABC(expandedABC === 'C' ? null : 'C')} className="w-full flex justify-between items-center p-2 rounded bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600">
                         <span className="font-bold text-slate-600 dark:text-slate-400">C Grubu (Az/Nadir)</span>
-                        <span className="font-black text-slate-600 dark:text-slate-300">{abcAnalysis.countC}</span>
-                    </div>
+                        <div className="flex items-center gap-2">
+                            <span className="font-black text-slate-600 dark:text-slate-300">{abcAnalysis.countC}</span>
+                            {expandedABC === 'C' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </div>
+                    </button>
+                    {expandedABC === 'C' && (
+                        <div className="ml-2 space-y-1 max-h-48 overflow-y-auto">
+                            {abcAnalysis.itemsC.map(p => (
+                                <div key={p.id} className="p-2 bg-slate-100 dark:bg-slate-600 rounded text-xs text-slate-700 dark:text-slate-300">
+                                    <span className="font-bold">{p.product_name}</span> - İşlem: {p.count}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -174,6 +244,63 @@ const Analytics: React.FC<AnalyticsProps> = ({ products, transactions }) => {
                     </div>
                 )}
             </div>
+        </div>
+
+        {/* EN ÇOK HARCANAN PARÇALAR */}
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+            <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                <TrendingUp className="text-red-500" size={18} /> En Çok Harcanan Parçalar (Top 10)
+            </h3>
+            {topSpentItems.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs">Harcama verisi bulunmuyor.</div>
+            ) : (
+                <div className="space-y-2">
+                    {topSpentItems.map((item, idx) => (
+                        <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700 rounded-lg border border-slate-100 dark:border-slate-600">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-black text-red-600 dark:text-red-400 text-sm">{idx + 1}.</span>
+                                    <div>
+                                        <span className="font-bold text-slate-800 dark:text-white text-sm">{item.product_name}</span>
+                                        <span className="text-xs text-slate-500 ml-2">({item.part_code})</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="font-black text-lg text-red-600">{item.qty_spent}</div>
+                                <div className="text-xs text-slate-500">{item.unit}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+
+        {/* HAMMADDE ANALİZİ */}
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+            <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                <Zap className="text-yellow-500" size={18} /> Hammadde Kullanım Analizi
+            </h3>
+            {materialAnalysis.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs">Hammadde verisi bulunmuyor.</div>
+            ) : (
+                <div className="space-y-3">
+                    {materialAnalysis.map((material, idx) => (
+                        <div key={material.name} className="bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 p-4 rounded-xl border border-yellow-100 dark:border-yellow-800">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="font-bold text-yellow-900 dark:text-yellow-200">{material.name}</span>
+                                <span className="px-3 py-1 bg-yellow-200 dark:bg-yellow-900/50 text-yellow-900 dark:text-yellow-200 rounded-full text-sm font-bold">{material.count} Ürün</span>
+                            </div>
+                            <div className="w-full bg-yellow-200 dark:bg-yellow-900/30 h-2 rounded-full overflow-hidden">
+                                <div style={{width: `${(material.count / products.length) * 100}%`}} className="h-full bg-yellow-500 dark:bg-yellow-600"></div>
+                            </div>
+                            <div className="mt-2 text-xs text-yellow-800 dark:text-yellow-300 line-clamp-2">
+                                Ürünler: {material.products.slice(0, 3).join(', ')}{material.products.length > 3 ? '...' : ''}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
 
         {/* REYON HARİTASI */}
