@@ -69,14 +69,25 @@ export const loadFromSupabase = async (url: string, key: string) => {
     
     const products = await fetchAllData(client, 'products');
     const transactions = await fetchAllData(client, 'transactions');
-    
-    let orders: Order[] = [];
-    try {
-        orders = await fetchAllData(client, 'orders');
-    } catch (e) { console.warn("Orders table might be missing"); }
+    const orders = await fetchAllData(client, 'orders');
 
     return { success: true, data: { products, transactions, orders }, message: 'OK' };
-  } catch (e: any) { return { success: false, message: e.message }; }
+  } catch (e: any) { 
+    if (e.message.includes('relation "public.orders" does not exist')) {
+        console.warn("Supabase: 'orders' table not found, continuing without it.");
+        // If the orders table doesn't exist, we can try to load the rest.
+        try {
+            const client = initSupabase(url, key);
+            if (!client) return { success: false, message: 'Client error' };
+            const products = await fetchAllData(client, 'products');
+            const transactions = await fetchAllData(client, 'transactions');
+            return { success: true, data: { products, transactions, orders: [] }, message: 'OK' };
+        } catch (e2: any) {
+            return { success: false, message: e2.message };
+        }
+    }
+    return { success: false, message: e.message };
+  }
 };
 
 export const saveToSupabase = async (url: string, key: string, products: Product[], transactions: Transaction[], orders?: Order[]) => {
