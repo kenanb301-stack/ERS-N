@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef, useDeferredValue } from 'react';
 import { Search, Package, Edit, Trash2, Plus, FileSpreadsheet, Printer, MapPin, SlidersHorizontal, ArrowUpAZ, ArrowDownZA, RotateCcw } from 'lucide-react';
 import { Product, User } from '../types';
@@ -27,6 +26,12 @@ const InventoryItem = React.memo(({ product, currentUser, onDelete, onEdit }: { 
         if (current <= min) return 'bg-red-50 text-red-700 border-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/30';
         if (current <= min * 1.5) return 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900/30';
         return 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-900/30';
+    };
+
+    const getStockQuantityColor = (current: number, min: number) => {
+      if (current <= min) return 'text-red-600 dark:text-red-400';
+      if (current <= min * 1.5) return 'text-amber-600 dark:text-amber-400';
+      return 'text-slate-700 dark:text-slate-200';
     };
 
     return (
@@ -66,7 +71,7 @@ const InventoryItem = React.memo(({ product, currentUser, onDelete, onEdit }: { 
 
             <div className="flex items-center justify-between w-full sm:w-auto gap-6 pl-16 sm:pl-0">
                 <div className="text-right">
-                    <span className="block text-2xl font-black text-slate-700 dark:text-slate-200">
+                    <span className={`block text-2xl font-black ${getStockQuantityColor(product.current_stock, product.min_stock_level)}`}>
                         {product.current_stock}
                         <span className="text-xs font-medium text-slate-400 ml-1">{product.unit}</span>
                     </span>

@@ -191,13 +191,13 @@ const CycleCountModal: React.FC<CycleCountModalProps> = ({ isOpen, onClose, prod
                             locationProducts.map(product => {
                                 const isCounted = countedProducts.has(product.id);
                                 return (
-                                    <div ref={el => itemRefs.current[product.id] = el} key={product.id}>
+                                    <div ref={(el) => { itemRefs.current[product.id] = el; }} key={product.id}>
                                         <CountCard 
                                             product={product} 
                                             blindMode={blindMode} 
                                             isCounted={isCounted}
                                             onCount={handleCountSubmit}
-                                            inputRef={el => inputRefs.current[product.id] = el}
+                                            inputRef={(el) => { inputRefs.current[product.id] = el; }}
                                         />
                                     </div>
                                 );
