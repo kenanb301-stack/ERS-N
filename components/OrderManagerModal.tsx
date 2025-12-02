@@ -9,7 +9,7 @@ interface OrderManagerModalProps {
   onClose: () => void;
   products: Product[];
   orders: Order[];
-  onSaveOrder: (order: Order) => void;
+  onSaveOrder: (order: Omit<Order, 'id'>) => void;
   onDeleteOrder: (id: string) => void;
   onUpdateOrderStatus: (id: string, status: 'COMPLETED') => void;
 }
@@ -127,7 +127,7 @@ const OrderManagerModal: React.FC<OrderManagerModalProps> = ({ isOpen, onClose, 
 
   const handleCreateOrder = () => {
       if (!newOrderName || importedItems.length === 0) return;
-      const newOrder: Order = { id: Math.random().toString(36).substr(2, 9), name: newOrderName, status: 'PENDING', items: importedItems, created_at: new Date().toISOString() };
+      const newOrder: Omit<Order, 'id'> = { name: newOrderName, status: 'PENDING', items: importedItems, created_at: new Date().toISOString() };
       onSaveOrder(newOrder);
       setNewOrderName('');
       setImportedItems([]);
