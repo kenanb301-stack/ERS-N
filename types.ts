@@ -47,7 +47,7 @@ export interface OrderItem {
 }
 
 export interface Order {
-  id?: string;
+  id: string;
   name: string; // Sipariş Adı / Müşteri
   status: 'PENDING' | 'COMPLETED';
   items: OrderItem[];

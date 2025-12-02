@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { X, Database, Copy, CheckCircle, ShieldCheck, Settings, FileText, ExternalLink, Zap, AlertTriangle, Loader2 } from 'lucide-react';
 import { CloudConfig } from '../types';
@@ -28,8 +27,7 @@ const CloudSetupModal: React.FC<CloudSetupModalProps> = ({ isOpen, onClose, onSa
   };
 
   const sqlCode = `
--- TABLOLARI OLUŞTURMA KODU --
-
+-- 1. ÜRÜNLER TABLOSU --
 create table if not exists products (
   id text primary key,
   product_name text,
@@ -47,6 +45,7 @@ create table if not exists products (
   last_counted_at text
 );
 
+-- 2. HAREKETLER TABLOSU --
 create table if not exists transactions (
   id text primary key,
   product_id text,
@@ -60,21 +59,21 @@ create table if not exists transactions (
   new_stock numeric
 );
 
--- YENİ: Sipariş Yönetimi için Tablo --
+-- 3. SİPARİŞLER TABLOSU (KRİTİK GÜNCELLEME) --
 create table if not exists orders (
   id text primary key,
   name text,
   status text,
   created_at text,
-  items jsonb -- Sipariş kalemleri JSON olarak saklanır
+  items jsonb -- Sipariş kalemleri JSON formatında saklanır
 );
 
--- İZİNLERİ AÇMA (BAĞLANTI HATASINI ÇÖZER) --
+-- 4. İZİNLERİ AÇMA (BAĞLANTI HATASINI ÇÖZER) --
 alter table products disable row level security;
 alter table transactions disable row level security;
 alter table orders disable row level security;
 
--- EKSİK SÜTUNLARI TAMAMLAMA --
+-- 5. EKSİK SÜTUNLARI TAMAMLAMA --
 alter table products add column if not exists short_id text;
 alter table products add column if not exists last_counted_at text;
   `.trim();
@@ -96,16 +95,19 @@ alter table products add column if not exists last_counted_at text;
         </div>
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
             <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                <h3 className="font-bold text-indigo-800 dark:text-indigo-300 text-sm mb-2 flex items-center gap-2"><ShieldCheck size={16}/> Veri Güvenliği</h3>
-                <p className="text-xs text-indigo-700 dark:text-indigo-200">Verileriniz Supabase veritabanında güvenle saklanır. Sipariş modülü için aşağıdaki SQL kodunu çalıştırın.</p>
+                <h3 className="font-bold text-indigo-800 dark:text-indigo-300 text-sm mb-2 flex items-center gap-2"><ShieldCheck size={16}/> Veri Güvenliği & Tablolar</h3>
+                <p className="text-xs text-indigo-700 dark:text-indigo-200">
+                    Siparişlerin bulutta saklanabilmesi için aşağıdaki SQL kodunu Supabase panelinde çalıştırmanız gerekmektedir. 
+                    Bu kod 'orders' tablosunu oluşturur ve izinleri ayarlar.
+                </p>
             </div>
             <div className="relative bg-slate-900 rounded-lg p-3 group border border-slate-700">
-                <pre className="text-[10px] font-mono text-green-400 overflow-x-auto h-32 whitespace-pre-wrap">{sqlCode}</pre>
+                <pre className="text-[10px] font-mono text-green-400 overflow-x-auto h-48 whitespace-pre-wrap">{sqlCode}</pre>
                 <button onClick={handleCopy} className="absolute top-2 right-2 p-2 bg-white/10 hover:bg-white/20 text-white rounded">{copied ? <CheckCircle size={16} /> : <Copy size={16} />}</button>
             </div>
             <div className="space-y-4">
-                <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Project URL" className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
-                <input type="text" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API Key" className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Project URL (https://...supabase.co)" className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                <input type="text" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API Key (anon public)" className="w-full p-2 border rounded dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
             </div>
             {testResult && <div className={`p-3 rounded text-sm font-bold ${testResult.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{testResult.message}</div>}
             <div className="flex gap-3">

@@ -67,27 +67,22 @@ export const loadFromSupabase = async (url: string, key: string) => {
     const client = initSupabase(url, key);
     if (!client) return { success: false, message: 'Client error' };
     
+    // Ürünleri Çek
     const products = await fetchAllData(client, 'products');
+    
+    // Hareketleri Çek
     const transactions = await fetchAllData(client, 'transactions');
-    const orders = await fetchAllData(client, 'orders');
+    
+    // Siparişleri Çek (YENİ EKLENEN KISIM)
+    let orders: Order[] = [];
+    try {
+        orders = await fetchAllData(client, 'orders');
+    } catch (e) { 
+        console.warn("Orders table might be missing, returning empty array."); 
+    }
 
     return { success: true, data: { products, transactions, orders }, message: 'OK' };
-  } catch (e: any) { 
-    if (e.message.includes('relation "public.orders" does not exist')) {
-        console.warn("Supabase: 'orders' table not found, continuing without it.");
-        // If the orders table doesn't exist, we can try to load the rest.
-        try {
-            const client = initSupabase(url, key);
-            if (!client) return { success: false, message: 'Client error' };
-            const products = await fetchAllData(client, 'products');
-            const transactions = await fetchAllData(client, 'transactions');
-            return { success: true, data: { products, transactions, orders: [] }, message: 'OK' };
-        } catch (e2: any) {
-            return { success: false, message: e2.message };
-        }
-    }
-    return { success: false, message: e.message };
-  }
+  } catch (e: any) { return { success: false, message: e.message }; }
 };
 
 export const saveToSupabase = async (url: string, key: string, products: Product[], transactions: Transaction[], orders?: Order[]) => {
@@ -97,7 +92,11 @@ export const saveToSupabase = async (url: string, key: string, products: Product
 
     if (products.length > 0) await saveInBatches(client, 'products', products);
     if (transactions.length > 0) await saveInBatches(client, 'transactions', transactions);
-    if (orders && orders.length > 0) await saveInBatches(client, 'orders', orders);
+    
+    // Siparişleri Kaydet (YENİ EKLENEN KISIM)
+    if (orders && orders.length > 0) {
+        await saveInBatches(client, 'orders', orders);
+    }
 
     return { success: true, message: 'Saved' };
   } catch (e: any) { return { success: false, message: e.message }; }
@@ -108,7 +107,7 @@ export const deleteMissingRecords = async (url: string, key: string, localProduc
         const client = initSupabase(url, key);
         if (!client) return;
 
-        // 1. Products
+        // 1. Products Delete Logic
         const remoteProducts = await fetchAllData(client, 'products');
         const localProductIds = new Set(localProducts.map(p => p.id));
         const productsToDelete = remoteProducts.filter((p: any) => !localProductIds.has(p.id)).map((p: any) => p.id);
@@ -119,7 +118,7 @@ export const deleteMissingRecords = async (url: string, key: string, localProduc
             }
         }
 
-        // 2. Transactions
+        // 2. Transactions Delete Logic
         const remoteTransactions = await fetchAllData(client, 'transactions');
         const localTransactionIds = new Set(localTransactions.map(t => t.id));
         const transactionsToDelete = remoteTransactions.filter((t: any) => !localTransactionIds.has(t.id)).map((t: any) => t.id);
